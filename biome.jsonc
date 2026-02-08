@@ -1,0 +1,176 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.3.14/schema.json",
+
+	// コード補助の設定
+	"assist": {
+		// コード補助のアクションを指定
+		"actions": {
+			"source": {
+				// import 文の自動整理
+				"organizeImports": "on",
+
+				// JSX の属性をソート
+				"useSortedAttributes": "on",
+
+				// オブジェクトのキーをソート
+				"useSortedKeys": "on",
+
+				// CSS のプロパティをソート
+				"useSortedProperties": "on"
+			}
+		},
+		// コード補助の解析対象ファイル
+		"includes": ["./src/**", "./vite.config.*"]
+	},
+
+	// ファイルの除外
+	"files": {
+		// Biome 未対応のファイル形式をエラーにせずスキップ
+		"ignoreUnknown": true,
+		// コードの解析対象ファイル
+		"includes": ["**"]
+	},
+
+	// コードのフォーマット
+	"formatter": {
+		// インデントスタイル
+		"indentStyle": "tab",
+		// 行幅
+		"lineWidth": 120
+	},
+
+	// JavaScript の設定
+	"javascript": {
+		"formatter": {
+			// アロー関数の括弧 (asNeeded: 必要な場合のみ、always: 常に必要)
+			"arrowParentheses": "asNeeded",
+			// 引用符スタイル
+			"quoteStyle": "single",
+			// 末尾のカンマ (all: 全ての配列/オブジェクトに末尾のカンマを追加)
+			"trailingCommas": "all"
+		}
+	},
+
+	// コードの静的解析
+	"linter": {
+		// コードの静的解析対象ファイル
+		"includes": ["./src/**", "./vite.config.*"],
+
+		// コードの静的解析ルール
+		"rules": {
+			// アクセシビリティ
+			"a11y": {
+				// フォントに汎用フォント名を必須
+				"useGenericFontNames": "error"
+			},
+
+			// コードの複雑さ
+			"complexity": {
+				// !important の禁止
+				"noImportantStyles": "error"
+			},
+
+			// コードの正確性
+			"correctness": {
+				// linear-gradient の方向の誤り検出
+				"noInvalidDirectionInLinearGradient": "error",
+				// grid-template-areas の不正検出
+				"noInvalidGridAreas": "error",
+				// @import の位置不正検出
+				"noInvalidPositionAtImportRule": "error",
+				// var() の欠落検出
+				"noMissingVarFunction": "error",
+				// 未知の CSS 関数検出
+				"noUnknownFunction": "error",
+				// 未知のメディア特性検出
+				"noUnknownMediaFeatureName": "error",
+				// 未知の CSS プロパティ検出
+				"noUnknownProperty": "error",
+				// 未知の擬似クラス検出
+				"noUnknownPseudoClass": "error",
+				// 未知の擬似要素検出
+				"noUnknownPseudoElement": "error",
+				// 未知の型セレクタ検出
+				"noUnknownTypeSelector": "error",
+				// 未知の単位検出
+				"noUnknownUnit": "error",
+				// マッチ不能な An+B セレクタ検出
+				"noUnmatchableAnbSelector": "error"
+			},
+
+			// 実験的ルール (将来変更の可能性あり)
+			"nursery": {
+				// 非推奨メディアタイプの禁止
+				"noDeprecatedMediaType": "error",
+				// 空の CSS ソース検出
+				"noEmptySource": "error",
+				// Promise の未処理
+				"noFloatingPromises": "error",
+				// 三項演算子
+				"noTernary": "error",
+				// 型の明示 (推論可能な場合は不要)
+				"useExplicitType": "off"
+			},
+			// 推奨ルール
+			"recommended": true,
+
+			// コードスタイルの一貫性
+			"style": {
+				// 詳細度の降順禁止
+				"noDescendingSpecificity": "error",
+				// 推論可能な型注釈
+				"noInferrableTypes": "error",
+				// @value 禁止 (CSS variables 推奨)
+				"noValueAtRule": "error",
+				// if/else/for/while 等の波括弧
+				"useBlockStatements": "error",
+				// クラスメンバーのアクセス修飾子
+				"useConsistentMemberAccessibility": {
+					"level": "error",
+					"options": {
+						"accessibility": "explicit"
+					}
+				},
+				// import type の使用
+				"useImportType": "error"
+			},
+
+			// バグの疑いがあるコードの検出
+			"suspicious": {
+				// console の使用
+				"noConsole": "error",
+				// @import の重複検出
+				"noDuplicateAtImportRules": "error",
+				// カスタムプロパティの重複検出
+				"noDuplicateCustomProperties": "error",
+				// フォント名の重複検出
+				"noDuplicateFontNames": "error",
+				// プロパティの重複検出
+				"noDuplicateProperties": "error",
+				// keyframe セレクタの重複検出
+				"noDuplicateSelectorsKeyframeBlock": "error",
+				// 空ブロック検出
+				"noEmptyBlock": "error",
+				// 空ブロック
+				"noEmptyBlockStatements": "error",
+				// 空インターフェース
+				"noEmptyInterface": "off",
+				// keyframe 内の !important 検出
+				"noImportantInKeyframe": "error",
+				// 不規則な空白検出
+				"noIrregularWhitespace": "error",
+				// ショートハンドの上書き検出
+				"noShorthandPropertyOverrides": "error",
+				// 未知の @ルール検出
+				"noUnknownAtRules": "error"
+			}
+		}
+	},
+
+	// バージョン管理 (.gitignore を尊重して node_modules 等を自動除外)
+	"vcs": {
+		"clientKind": "git",
+		"enabled": true,
+		"useIgnoreFile": true
+	}
+}
