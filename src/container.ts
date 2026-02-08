@@ -93,10 +93,12 @@ export class Container<
 
 	private readonly registrations: Map<unknown, Registration>;
 	private readonly instances: Map<unknown, unknown>;
+	private readonly resolvingTokens: Set<unknown>;
 
 	public constructor() {
 		this.registrations = new Map();
 		this.instances = new Map();
+		this.resolvingTokens = new Set();
 	}
 
 	/**
@@ -179,13 +181,51 @@ export class Container<
 			throw new ContainerError(`Token "${Container.tokenToString(token)}" is not registered.`);
 		}
 
-		const instance = factory.factory(this as unknown as Resolver<T, C, AC>);
-
-		if (factory.singleton) {
-			this.instances.set(token, instance);
+		if (this.resolvingTokens.has(token)) {
+			throw new ContainerError(`Circular dependency detected: ${this.buildCircularPath(token)}`);
 		}
 
-		return instance;
+		this.resolvingTokens.add(token);
+
+		try {
+			const instance = factory.factory(this as unknown as Resolver<T, C, AC>);
+
+			if (factory.singleton) {
+				this.instances.set(token, instance);
+			}
+
+			return instance;
+		} finally {
+			this.resolvingTokens.delete(token);
+		}
+	}
+
+	/**
+	 * Build a human-readable circular dependency path from the resolving tokens.
+	 *
+	 * Uses the insertion order of Set to extract only the cycle portion.
+	 * e.g. if resolvingTokens is [X, A, B, C] and token is A, returns "A -> B -> C -> A"
+	 *
+	 * @param token The token that caused the circular dependency
+	 * @returns Formatted cycle path string
+	 */
+	private buildCircularPath(token: unknown): string {
+		const path: string[] = [];
+		let found = false;
+
+		for (const t of this.resolvingTokens) {
+			if (t === token) {
+				found = true;
+			}
+
+			if (found) {
+				path.push(Container.tokenToString(t));
+			}
+		}
+
+		path.push(Container.tokenToString(token));
+
+		return path.join(' -> ');
 	}
 
 	/**
