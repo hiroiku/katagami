@@ -1,4 +1,4 @@
-[English](./README.md) | [日本語](./README.ja.md)
+[English](./README.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [繁體中文](./README.zh-TW.md) | [简体中文](./README.zh-CN.md) | [Español](./README.es.md) | [Deutsch](./README.de.md) | [Français](./README.fr.md)
 
 # Katagami
 
@@ -19,6 +19,7 @@
 | 非同期ファクトリ         | Promise を返すファクトリは型システムが自動的に追跡                                            |
 | 循環依存の検出           | 循環パスの全体を含む明確なエラーメッセージ                                                    |
 | Disposable サポート      | TC39 Explicit Resource Management（`Symbol.dispose` / `Symbol.asyncDispose` / `await using`） |
+| キャプティブ依存の防止   | Singleton/Transient のファクトリから Scoped トークンへのアクセスをコンパイル時に防止          |
 | ハイブリッドトークン戦略 | クラストークンで厳密な型安全性、PropertyKey トークンで柔軟性                                  |
 | インターフェース型マップ | `createContainer<T>()` にインターフェースを渡して登録順序非依存に                             |
 | ゼロ依存                 | デコレータ不要、reflect-metadata 不要、ポリフィル不要                                         |
@@ -306,11 +307,38 @@ const container = createContainer<Services>()
 	});
 ```
 
+### キャプティブ依存の防止
+
+「キャプティブ依存」とは、長いライフタイムのサービス（Singleton や Transient）が短いライフタイムのサービス（Scoped）を捕獲し、意図したスコープを超えて保持してしまう問題です。Katagami はこれをコンパイル時に防止します — Singleton と Transient のファクトリには、Scoped トークンを含まないリゾルバのみが渡されます：
+
+```ts
+import { createContainer } from 'katagami';
+
+class DbPool {}
+class RequestContext {}
+
+const container = createContainer()
+	.registerScoped(RequestContext, () => new RequestContext())
+	// @ts-expect-error — Singleton のファクトリは Scoped トークンを解決できない
+	.registerSingleton(DbPool, r => new DbPool(r.resolve(RequestContext)));
+```
+
+一方、Scoped のファクトリは Scoped トークンと非 Scoped トークンの両方を解決できます：
+
+```ts
+const container = createContainer()
+	.registerSingleton(DbPool, () => new DbPool())
+	.registerScoped(RequestContext, r => {
+		r.resolve(DbPool); // OK — Scoped のファクトリは Singleton トークンを解決できる
+		return new RequestContext();
+	});
+```
+
 ## API
 
-### `createContainer<T>()`
+### `createContainer<T, ScopedT>()`
 
-新しい DI コンテナを作成します。PropertyKey トークンの型マップを定義するには、インターフェースを `T` として渡します。
+新しい DI コンテナを作成します。PropertyKey トークンの型マップを定義するには、インターフェースを `T` として渡します。Scoped な PropertyKey トークンの型マップを定義するには `ScopedT` を渡します（`T` と同様に登録順序非依存）。
 
 ### `container.registerSingleton(token, factory)`
 
@@ -343,6 +371,10 @@ const container = createContainer<Services>()
 ### `ContainerError`
 
 未登録トークンの解決、循環依存、破棄済みコンテナ/スコープの操作など、コンテナの障害時にスローされるエラークラスです。
+
+### `Resolver`
+
+ファクトリコールバックに渡されるリゾルバを表す型エクスポートです。リゾルバを引数に取る関数を型付けする際に使用できます。
 
 ## ライセンス
 

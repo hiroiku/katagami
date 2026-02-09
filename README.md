@@ -1,4 +1,4 @@
-[English](./README.md) | [日本語](./README.ja.md)
+[English](./README.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [繁體中文](./README.zh-TW.md) | [简体中文](./README.zh-CN.md) | [Español](./README.es.md) | [Deutsch](./README.de.md) | [Français](./README.fr.md)
 
 # Katagami
 
@@ -19,6 +19,7 @@ Lightweight TypeScript DI container with full type inference.
 | Async factories               | Promise-returning factories are automatically tracked by the type system                     |
 | Circular dependency detection | Clear error messages with the full cycle path                                                |
 | Disposable support            | TC39 Explicit Resource Management (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`) |
+| Captive dependency prevention | Singleton/Transient factories cannot access scoped tokens; caught at compile time            |
 | Hybrid token strategy         | Class tokens for strict type safety, PropertyKey tokens for flexibility                      |
 | Interface type map            | Pass an interface to `createContainer<T>()` for order-independent registration               |
 | Zero dependencies             | No decorators, no reflect-metadata, no polyfills                                             |
@@ -306,11 +307,38 @@ const container = createContainer<Services>()
 	});
 ```
 
+### Captive Dependency Prevention
+
+A "captive dependency" occurs when a long-lived service (singleton or transient) captures a short-lived service (scoped), keeping it alive beyond its intended scope. Katagami prevents this at compile time — singleton and transient factories only receive a resolver limited to non-scoped tokens:
+
+```ts
+import { createContainer } from 'katagami';
+
+class DbPool {}
+class RequestContext {}
+
+const container = createContainer()
+	.registerScoped(RequestContext, () => new RequestContext())
+	// @ts-expect-error — singleton factory cannot resolve scoped token
+	.registerSingleton(DbPool, r => new DbPool(r.resolve(RequestContext)));
+```
+
+Scoped factories, on the other hand, can resolve both scoped and non-scoped tokens:
+
+```ts
+const container = createContainer()
+	.registerSingleton(DbPool, () => new DbPool())
+	.registerScoped(RequestContext, r => {
+		r.resolve(DbPool); // OK — scoped factory can resolve singleton tokens
+		return new RequestContext();
+	});
+```
+
 ## API
 
-### `createContainer<T>()`
+### `createContainer<T, ScopedT>()`
 
-Creates a new DI container. Pass an interface as `T` to define the type map for PropertyKey tokens.
+Creates a new DI container. Pass an interface as `T` to define the type map for PropertyKey tokens. Pass `ScopedT` to define a separate type map for scoped PropertyKey tokens (order-independent, just like `T`).
 
 ### `container.registerSingleton(token, factory)`
 
@@ -343,6 +371,10 @@ Disposes all managed instances in reverse creation order (LIFO). Calls `[Symbol.
 ### `ContainerError`
 
 Error class thrown for container failures such as resolving an unregistered token, circular dependencies, or operations on a disposed container/scope.
+
+### `Resolver`
+
+Type export representing the resolver passed to factory callbacks. Useful when you need to type a function that accepts a resolver parameter.
 
 ## License
 

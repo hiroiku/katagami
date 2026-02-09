@@ -436,3 +436,132 @@ describe('circular dependency detection', () => {
 		}
 	});
 });
+
+// Helper class for tryResolve tests
+class Unregistered {
+	public constructor(public value = 'unregistered') {}
+}
+
+describe('tryResolve (singleton)', () => {
+	test('returns the instance for a registered singleton class token', () => {
+		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
+		const instance = container.tryResolve(ServiceA);
+		expect(instance).toBeInstanceOf(ServiceA);
+	});
+
+	test('returns the same cached instance on subsequent calls', () => {
+		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
+		const first = container.tryResolve(ServiceA);
+		const second = container.tryResolve(ServiceA);
+		expect(first).toBe(second);
+	});
+
+	test('works with string token', () => {
+		const container = createContainer().registerSingleton('greeting', () => 'hello');
+		expect(container.tryResolve('greeting')).toBe('hello');
+	});
+
+	test('works with Symbol token', () => {
+		const token = Symbol('myService');
+		const container = createContainer().registerSingleton(token, () => 42);
+		expect(container.tryResolve(token)).toBe(42);
+	});
+});
+
+describe('tryResolve (transient)', () => {
+	test('returns the instance for a registered transient class token', () => {
+		const container = createContainer().registerTransient(ServiceA, () => new ServiceA());
+		const instance = container.tryResolve(ServiceA);
+		expect(instance).toBeInstanceOf(ServiceA);
+	});
+
+	test('creates a new instance on every call', () => {
+		const container = createContainer().registerTransient(ServiceA, () => new ServiceA());
+		const first = container.tryResolve(ServiceA);
+		const second = container.tryResolve(ServiceA);
+		expect(first).not.toBe(second);
+		expect(first).toBeInstanceOf(ServiceA);
+		expect(second).toBeInstanceOf(ServiceA);
+	});
+});
+
+describe('tryResolve (unregistered)', () => {
+	test('returns undefined for unregistered class token', () => {
+		const container = createContainer();
+		expect(container.tryResolve(Unregistered)).toBeUndefined();
+	});
+
+	test('returns undefined for unregistered string token', () => {
+		const container = createContainer();
+		expect(container.tryResolve('nonexistent')).toBeUndefined();
+	});
+
+	test('returns undefined for unregistered Symbol token', () => {
+		const container = createContainer();
+		const token = Symbol('unknown');
+		expect(container.tryResolve(token)).toBeUndefined();
+	});
+});
+
+describe('tryResolve (async)', () => {
+	test('returns a Promise for async singleton', async () => {
+		const container = createContainer().registerSingleton(AsyncService, async () => new AsyncService('async'));
+		const result = container.tryResolve(AsyncService);
+		expect(result).toBeInstanceOf(Promise);
+		const instance = await (result as Promise<AsyncService>);
+		expect(instance).toBeInstanceOf(AsyncService);
+		expect(instance.value).toBe('async');
+	});
+
+	test('returns the same Promise on subsequent calls', () => {
+		const container = createContainer().registerSingleton(AsyncService, async () => new AsyncService('async'));
+		const first = container.tryResolve(AsyncService);
+		const second = container.tryResolve(AsyncService);
+		expect(first).toBe(second);
+	});
+});
+
+describe('tryResolve (error conditions)', () => {
+	test('throws ContainerError for disposed container', async () => {
+		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
+		await container[Symbol.asyncDispose]();
+		expect(() => container.tryResolve(ServiceA)).toThrow(ContainerError);
+		expect(() => container.tryResolve(ServiceA)).toThrow('disposed');
+	});
+
+	test('throws ContainerError for scoped token from root container', () => {
+		const container = createContainer().registerScoped(ServiceA, () => new ServiceA());
+		const tryResolve = (container as never as { tryResolve: (t: unknown) => unknown }).tryResolve.bind(container);
+		expect(() => tryResolve(ServiceA)).toThrow(ContainerError);
+		expect(() => tryResolve(ServiceA)).toThrow('Cannot resolve scoped token');
+	});
+
+	test('throws ContainerError for circular dependency', () => {
+		const container = createContainer()
+			.registerSingleton(
+				CircularA,
+				r => new CircularA((r as never as { resolve: (t: unknown) => CircularB }).resolve(CircularB)),
+			)
+			.registerSingleton(
+				CircularB,
+				r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
+			);
+
+		expect(() => container.tryResolve(CircularA)).toThrow(ContainerError);
+		expect(() => container.tryResolve(CircularA)).toThrow('Circular dependency detected');
+	});
+});
+
+describe('tryResolve (dependency graph)', () => {
+	test('resolves dependency chain via tryResolve', () => {
+		const container = createContainer()
+			.registerSingleton(ServiceA, () => new ServiceA())
+			.registerSingleton(ServiceB, r => new ServiceB(r.resolve(ServiceA)))
+			.registerSingleton(ServiceC, r => new ServiceC(r.resolve(ServiceB)));
+
+		const c = container.tryResolve(ServiceC) as ServiceC;
+		expect(c).toBeInstanceOf(ServiceC);
+		expect(c.b).toBeInstanceOf(ServiceB);
+		expect(c.b.a).toBeInstanceOf(ServiceA);
+	});
+});

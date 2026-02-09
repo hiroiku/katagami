@@ -21,6 +21,21 @@ export interface Resolver<
 	resolve<V>(token: AbstractConstructor<V> & Async): Promise<V>;
 	resolve<V>(token: AbstractConstructor<V> & Sync): V;
 	resolve<K extends keyof T>(token: K): T[K];
+
+	/**
+	 * Try to resolve an instance for the given token.
+	 *
+	 * Returns `undefined` instead of throwing when the token is not registered.
+	 * Other errors (circular dependency, disposed container) are still thrown.
+	 *
+	 * @param token A token to resolve
+	 * @returns The instance associated with the token, or `undefined` if not registered
+	 */
+	tryResolve<V>(token: AbstractConstructor<V> & Async): Promise<V> | undefined;
+	tryResolve<V>(token: AbstractConstructor<V> & Sync): V | undefined;
+	tryResolve<K extends keyof T>(token: K): T[K] | undefined;
+	tryResolve<V>(token: AbstractConstructor<V>): V | Promise<V> | undefined;
+	tryResolve(token: PropertyKey): unknown;
 }
 
 /**

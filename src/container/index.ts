@@ -190,6 +190,35 @@ export class Container<
 	public resolve<V>(token: AbstractConstructor<V> & Sync): V;
 	public resolve<K extends keyof T>(token: K): T[K];
 	public resolve(token: unknown): unknown {
+		return this.resolveToken(token, true);
+	}
+
+	/**
+	 * Try to resolve an instance for the given token.
+	 *
+	 * Returns `undefined` instead of throwing when the token is not registered.
+	 * Other errors (circular dependency, disposed container) are still thrown.
+	 *
+	 * @param token A token to resolve
+	 * @returns The instance associated with the token, or `undefined` if not registered
+	 */
+	public tryResolve<V>(token: AbstractConstructor<V> & Async): Promise<V> | undefined;
+	public tryResolve<V>(token: AbstractConstructor<V> & Sync): V | undefined;
+	public tryResolve<K extends keyof T>(token: K): T[K] | undefined;
+	public tryResolve<V>(token: AbstractConstructor<V>): V | Promise<V> | undefined;
+	public tryResolve(token: PropertyKey): unknown;
+	public tryResolve(token: unknown): unknown {
+		return this.resolveToken(token, false);
+	}
+
+	/**
+	 * Internal resolution logic shared by resolve and tryResolve.
+	 *
+	 * @param token Token to resolve
+	 * @param required If true, throws when the token is not registered. If false, returns undefined.
+	 * @returns The resolved instance, or undefined if not registered and required is false
+	 */
+	private resolveToken(token: unknown, required: boolean): unknown {
 		if (this.disposed) {
 			throw new ContainerError('Cannot resolve from a disposed container.');
 		}
@@ -205,7 +234,11 @@ export class Container<
 			| undefined;
 
 		if (registration === undefined) {
-			throw new ContainerError(`Token "${tokenToString(token)}" is not registered.`);
+			if (required) {
+				throw new ContainerError(`Token "${tokenToString(token)}" is not registered.`);
+			}
+
+			return undefined;
 		}
 
 		if (registration.lifetime === 'scoped') {
