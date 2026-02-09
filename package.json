@@ -1,6 +1,6 @@
 {
 	"name": "katagami",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"description": "Lightweight DI container for TypeScript and JavaScript — full type inference, no decorators, no reflect-metadata, hybrid class & PropertyKey tokens.",
 	"license": "MIT",
 	"type": "module",
@@ -28,7 +28,7 @@
 	],
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/hiroiku/katagami.git"
+		"url": "git+https://github.com/hiroiku/katagami.git"
 	},
 	"scripts": {
 		"clean": "rm -rf dist",
