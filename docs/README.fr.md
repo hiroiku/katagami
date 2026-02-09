@@ -26,6 +26,7 @@ Conteneur DI léger pour TypeScript avec inférence de types complète.
 | Factories asynchrones                 | Les factories retournant des Promise sont automatiquement suivies par le système de types                                    |
 | Détection des dépendances circulaires | Messages d'erreur clairs avec le chemin complet du cycle                                                                     |
 | Résolution optionnelle                | `tryResolve` retourne `undefined` pour les tokens non enregistrés au lieu de lever une exception                             |
+| Résolution différée                   | Instanciation différée basée sur Proxy via `lazy()` de `katagami/lazy` ; instance créée au premier accès                     |
 
 ## Installation
 
@@ -70,15 +71,16 @@ La DI basée sur les décorateurs nécessite les options du compilateur `experim
 
 ### Tree-shakeable
 
-Katagami est divisé en exports par sous-chemin. Importez uniquement ce dont vous avez besoin — `katagami/scope` et `katagami/disposable` sont complètement éliminés du bundle s'ils ne sont pas importés. Combiné avec `sideEffects: false`, les bundlers peuvent supprimer chaque octet inutilisé.
+Katagami est divisé en exports par sous-chemin. Importez uniquement ce dont vous avez besoin — `katagami/scope`, `katagami/disposable` et `katagami/lazy` sont complètement éliminés du bundle s'ils ne sont pas importés. Combiné avec `sideEffects: false`, les bundlers peuvent supprimer chaque octet inutilisé.
 
 ```ts
-// Noyau uniquement — scope et disposable ne sont pas inclus dans le bundle
+// Noyau uniquement — scope, disposable et lazy ne sont pas inclus dans le bundle
 import { createContainer } from 'katagami';
 
 // Importez uniquement ce dont vous avez besoin
 import { createScope } from 'katagami/scope';
 import { disposable } from 'katagami/disposable';
+import { lazy } from 'katagami/lazy';
 ```
 
 ### Inférence de types complète à partir des tokens de classe
@@ -340,17 +342,59 @@ container.resolve(Connection); // OK
 container.registerSingleton(/* ... */); // Erreur à la compilation
 ```
 
-### Tree Shaking
+### Résolution différée (Lazy Resolution)
 
-Katagami utilise des exports par sous-chemin pour diviser les fonctionnalités en points d'entrée indépendants. Si vous n'avez besoin que du conteneur principal, `katagami/scope` et `katagami/disposable` sont complètement exclus du bundle. Le paquet déclare `sideEffects: false`, permettant aux bundlers de supprimer en toute sécurité tout code inutilisé.
+La fonction `lazy()` de `katagami/lazy` crée un proxy qui diffère la création d'instance jusqu'au premier accès à une propriété. C'est utile pour optimiser le temps de démarrage ou résoudre les dépendances circulaires.
 
 ```ts
-// Noyau uniquement — scope et disposable ne sont pas inclus dans le bundle
+import { createContainer } from 'katagami';
+import { lazy } from 'katagami/lazy';
+
+class HeavyService {
+	constructor() {
+		// initialisation coûteuse
+	}
+	process() {
+		return 'done';
+	}
+}
+
+const container = createContainer().registerSingleton(HeavyService, () => new HeavyService());
+
+const service = lazy(container, HeavyService);
+// HeavyService n'est PAS encore instancié
+
+service.process(); // instance créée ici, puis mise en cache
+service.process(); // utilise l'instance en cache
+```
+
+Le proxy transfère de manière transparente tous les accès aux propriétés, appels de méthodes, vérifications `in` et consultations de prototype vers l'instance réelle. Les méthodes sont automatiquement liées à l'instance réelle, donc `this` fonctionne correctement même lors de la déstructuration.
+
+Seuls les **tokens de classe synchrones** sont supportés. Les tokens asynchrones et les tokens PropertyKey sont rejetés au niveau des types car les traps de Proxy sont synchrones.
+
+`lazy()` fonctionne avec Container, Scope, DisposableContainer et DisposableScope :
+
+```ts
+import { createScope } from 'katagami/scope';
+
+const root = createContainer().registerScoped(RequestContext, () => new RequestContext());
+const scope = createScope(root);
+
+const ctx = lazy(scope, RequestContext); // résolution scoped différée
+```
+
+### Tree Shaking
+
+Katagami utilise des exports par sous-chemin pour diviser les fonctionnalités en points d'entrée indépendants. Si vous n'avez besoin que du conteneur principal, `katagami/scope`, `katagami/disposable` et `katagami/lazy` sont complètement exclus du bundle. Le paquet déclare `sideEffects: false`, permettant aux bundlers de supprimer en toute sécurité tout code inutilisé.
+
+```ts
+// Noyau uniquement — scope, disposable et lazy ne sont pas inclus dans le bundle
 import { createContainer } from 'katagami';
 
 // Importez uniquement ce dont vous avez besoin
 import { createScope } from 'katagami/scope';
 import { disposable } from 'katagami/disposable';
+import { lazy } from 'katagami/lazy';
 ```
 
 ### Carte de types par interface
@@ -469,6 +513,10 @@ Résout et retourne l'instance pour le token donné. Se comporte de la même man
 ### `Scope.prototype.tryResolve(token)`
 
 Tente de résoudre l'instance pour le token donné. Retourne `undefined` si le token n'est pas enregistré, au lieu de lever une exception. Lève toujours une `ContainerError` pour les dépendances circulaires ou les opérations sur des scopes supprimés.
+
+### `lazy(source, token)` — `katagami/lazy`
+
+Crée un Proxy qui diffère `resolve()` jusqu'au premier accès à une propriété. L'instance résolue est mise en cache — les accès suivants utilisent le cache. Seuls les tokens de classe synchrones sont supportés ; les tokens asynchrones et PropertyKey sont rejetés au niveau des types. Fonctionne avec `Container`, `Scope`, `DisposableContainer` et `DisposableScope`.
 
 ### `disposable(container)` — `katagami/disposable`
 

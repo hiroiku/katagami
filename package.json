@@ -20,6 +20,11 @@
 			"types": "./dist/disposable/index.d.ts",
 			"import": "./dist/disposable/index.js",
 			"require": "./dist/disposable/index.cjs"
+		},
+		"./lazy": {
+			"types": "./dist/lazy/index.d.ts",
+			"import": "./dist/lazy/index.js",
+			"require": "./dist/lazy/index.cjs"
 		}
 	},
 	"main": "./dist/index.cjs",
@@ -45,14 +50,13 @@
 		"clean": "rm -rf dist",
 		"build": "bun run clean && bun run build:types && bun run build:esm && bun run build:cjs",
 		"build:types": "tsc -p tsconfig.build.json",
-		"build:esm": "bun build ./src/index.ts ./src/scope/index.ts ./src/disposable/index.ts --outdir dist --format esm --splitting",
-		"build:cjs": "bun build ./src/index.ts --outfile dist/index.cjs --format cjs && bun build ./src/scope/index.ts --outfile dist/scope/index.cjs --format cjs && bun build ./src/disposable/index.ts --outfile dist/disposable/index.cjs --format cjs",
-		"test": "bun test --coverage --dots",
+		"build:esm": "bun build ./src/index.ts ./src/scope/index.ts ./src/disposable/index.ts ./src/lazy/index.ts --outdir dist --format esm --splitting",
+		"build:cjs": "bun build ./src/index.ts --outfile dist/index.cjs --format cjs && bun build ./src/scope/index.ts --outfile dist/scope/index.cjs --format cjs && bun build ./src/disposable/index.ts --outfile dist/disposable/index.cjs --format cjs && bun build ./src/lazy/index.ts --outfile dist/lazy/index.cjs --format cjs",
 		"prepublishOnly": "bun run build",
 		"check": "bun run format",
 		"lint": "biome lint .",
 		"format": "biome check --write .",
-		"verify": "bun run build:types && bun run check && bun run test"
+		"verify": "bun run build:types && bun run check && bun test"
 	},
 	"dependencies": {
 		"@types/bun": "^1.3.8"

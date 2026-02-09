@@ -12,20 +12,21 @@ Leichtgewichtiger TypeScript-DI-Container mit vollständiger Typinferenz.
 
 ## Funktionen
 
-| Funktion                               | Beschreibung                                                                                                   |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Null Abhängigkeiten                    | Keine Decorators, kein reflect-metadata, keine Polyfills — funktioniert mit jedem Bundler direkt einsatzbereit |
-| Vollständige Typinferenz               | Typen akkumulieren sich durch Methodenverkettung; nicht registrierte Token erzeugen Kompilierzeitfehler        |
-| Tree-Shaking-fähig                     | Subpath-Exports (`katagami/scope`, `katagami/disposable`) und `sideEffects: false` für minimale Bundle-Größe   |
-| Verhinderung gefangener Abhängigkeiten | Singleton-/Transient-Factories können nicht auf Scoped-Token zugreifen; wird zur Kompilierzeit erkannt         |
-| Hybride Token-Strategie                | Klassen-Token für strikte Typsicherheit, PropertyKey-Token für Flexibilität                                    |
-| Interface-Typ-Map                      | Übergeben Sie ein Interface an `createContainer<T>()` für reihenfolgeunabhängige Registrierung                 |
-| Drei Lebenszyklen                      | Singleton, Transient und Scoped mit Kind-Containern                                                            |
-| Disposable-Unterstützung               | TC39 Explicit Resource Management (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`)                   |
-| Modulkomposition                       | Container können mit `use()` komponiert werden, um Registrierungen zu gruppieren und wiederzuverwenden         |
-| Asynchrone Factories                   | Promise-zurückgebende Factories werden automatisch vom Typsystem verfolgt                                      |
-| Erkennung zirkulärer Abhängigkeiten    | Klare Fehlermeldungen mit dem vollständigen Zykluspfad                                                         |
-| Optionale Auflösung                    | `tryResolve` gibt `undefined` für nicht registrierte Token zurück statt zu werfen                              |
+| Funktion                               | Beschreibung                                                                                                          |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Null Abhängigkeiten                    | Keine Decorators, kein reflect-metadata, keine Polyfills — funktioniert mit jedem Bundler direkt einsatzbereit        |
+| Vollständige Typinferenz               | Typen akkumulieren sich durch Methodenverkettung; nicht registrierte Token erzeugen Kompilierzeitfehler               |
+| Tree-Shaking-fähig                     | Subpath-Exports (`katagami/scope`, `katagami/disposable`) und `sideEffects: false` für minimale Bundle-Größe          |
+| Verhinderung gefangener Abhängigkeiten | Singleton-/Transient-Factories können nicht auf Scoped-Token zugreifen; wird zur Kompilierzeit erkannt                |
+| Hybride Token-Strategie                | Klassen-Token für strikte Typsicherheit, PropertyKey-Token für Flexibilität                                           |
+| Interface-Typ-Map                      | Übergeben Sie ein Interface an `createContainer<T>()` für reihenfolgeunabhängige Registrierung                        |
+| Drei Lebenszyklen                      | Singleton, Transient und Scoped mit Kind-Containern                                                                   |
+| Disposable-Unterstützung               | TC39 Explicit Resource Management (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`)                          |
+| Modulkomposition                       | Container können mit `use()` komponiert werden, um Registrierungen zu gruppieren und wiederzuverwenden                |
+| Asynchrone Factories                   | Promise-zurückgebende Factories werden automatisch vom Typsystem verfolgt                                             |
+| Erkennung zirkulärer Abhängigkeiten    | Klare Fehlermeldungen mit dem vollständigen Zykluspfad                                                                |
+| Optionale Auflösung                    | `tryResolve` gibt `undefined` für nicht registrierte Token zurück statt zu werfen                                     |
+| Verzögerte Auflösung                   | Proxy-basierte verzögerte Instanziierung über `lazy()` aus `katagami/lazy`; Instanz wird beim ersten Zugriff erstellt |
 
 ## Installation
 
@@ -70,15 +71,16 @@ Decorator-basierte DI erfordert die Compiler-Optionen `experimentalDecorators` u
 
 ### Tree-Shaking-fähig
 
-Katagami ist in Subpath-Exports aufgeteilt. Importieren Sie nur, was Sie brauchen — `katagami/scope` und `katagami/disposable` werden vollständig aus dem Bundle eliminiert, wenn sie nicht importiert werden. In Kombination mit `sideEffects: false` können Bundler jedes ungenutzte Byte entfernen.
+Katagami ist in Subpath-Exports aufgeteilt. Importieren Sie nur, was Sie brauchen — `katagami/scope`, `katagami/disposable` und `katagami/lazy` werden vollständig aus dem Bundle eliminiert, wenn sie nicht importiert werden. In Kombination mit `sideEffects: false` können Bundler jedes ungenutzte Byte entfernen.
 
 ```ts
-// Nur der Kern — scope und disposable sind nicht im Bundle enthalten
+// Nur der Kern — scope, disposable und lazy sind nicht im Bundle enthalten
 import { createContainer } from 'katagami';
 
 // Importieren Sie nur, was Sie brauchen
 import { createScope } from 'katagami/scope';
 import { disposable } from 'katagami/disposable';
+import { lazy } from 'katagami/lazy';
 ```
 
 ### Vollständige Typinferenz durch Klassen-Token
@@ -340,17 +342,59 @@ container.resolve(Connection); // OK
 container.registerSingleton(/* ... */); // Kompilierungsfehler
 ```
 
-### Tree Shaking
+### Verzögerte Auflösung (Lazy Resolution)
 
-Katagami verwendet Subpath-Exports, um Funktionalität in unabhängige Einstiegspunkte aufzuteilen. Wenn Sie nur den Kern-Container benötigen, werden `katagami/scope` und `katagami/disposable` vollständig aus dem Bundle ausgeschlossen. Das Paket deklariert `sideEffects: false`, sodass Bundler ungenutzten Code sicher entfernen können.
+Die `lazy()`-Funktion aus `katagami/lazy` erstellt einen Proxy, der die Instanzerstellung bis zum ersten Property-Zugriff verzögert. Dies ist nützlich zur Optimierung der Startzeit oder zum Aufbrechen zirkulärer Abhängigkeiten.
 
 ```ts
-// Nur der Kern — scope und disposable sind nicht im Bundle enthalten
+import { createContainer } from 'katagami';
+import { lazy } from 'katagami/lazy';
+
+class HeavyService {
+	constructor() {
+		// aufwendige Initialisierung
+	}
+	process() {
+		return 'done';
+	}
+}
+
+const container = createContainer().registerSingleton(HeavyService, () => new HeavyService());
+
+const service = lazy(container, HeavyService);
+// HeavyService ist noch NICHT instanziiert
+
+service.process(); // Instanz wird hier erstellt und gecacht
+service.process(); // verwendet die gecachte Instanz
+```
+
+Der Proxy leitet transparent alle Property-Zugriffe, Methodenaufrufe, `in`-Prüfungen und Prototyp-Lookups an die echte Instanz weiter. Methoden werden automatisch an die echte Instanz gebunden, sodass `this` auch bei Destrukturierung korrekt funktioniert.
+
+Nur **synchrone Klassen-Token** werden unterstützt. Asynchrone Token und PropertyKey-Token werden auf Typebene abgelehnt, da Proxy-Traps synchron sind.
+
+`lazy()` funktioniert mit Container, Scope, DisposableContainer und DisposableScope:
+
+```ts
+import { createScope } from 'katagami/scope';
+
+const root = createContainer().registerScoped(RequestContext, () => new RequestContext());
+const scope = createScope(root);
+
+const ctx = lazy(scope, RequestContext); // verzögerte Scoped-Auflösung
+```
+
+### Tree Shaking
+
+Katagami verwendet Subpath-Exports, um Funktionalität in unabhängige Einstiegspunkte aufzuteilen. Wenn Sie nur den Kern-Container benötigen, werden `katagami/scope`, `katagami/disposable` und `katagami/lazy` vollständig aus dem Bundle ausgeschlossen. Das Paket deklariert `sideEffects: false`, sodass Bundler ungenutzten Code sicher entfernen können.
+
+```ts
+// Nur der Kern — scope, disposable und lazy sind nicht im Bundle enthalten
 import { createContainer } from 'katagami';
 
 // Importieren Sie nur, was Sie brauchen
 import { createScope } from 'katagami/scope';
 import { disposable } from 'katagami/disposable';
+import { lazy } from 'katagami/lazy';
 ```
 
 ### Interface-Typ-Map
@@ -521,6 +565,10 @@ Löst die Instanz für das gegebene Token auf und gibt sie zurück. Verhält sic
 ### `Scope.prototype.tryResolve(token)`
 
 Versucht, die Instanz für das gegebene Token aufzulösen. Gibt `undefined` zurück, wenn das Token nicht registriert ist, anstatt zu werfen. Wirft immer noch `ContainerError` bei zirkulären Abhängigkeiten oder Operationen auf freigegebenen Scopes.
+
+### `lazy(source, token)` — `katagami/lazy`
+
+Erstellt einen Proxy, der `resolve()` bis zum ersten Property-Zugriff verzögert. Die aufgelöste Instanz wird gecacht — nachfolgende Zugriffe verwenden den Cache. Nur synchrone Klassen-Token werden unterstützt; asynchrone Token und PropertyKey-Token werden auf Typebene abgelehnt. Funktioniert mit `Container`, `Scope`, `DisposableContainer` und `DisposableScope`.
 
 ### `disposable(container)` — `katagami/disposable`
 

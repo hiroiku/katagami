@@ -26,6 +26,7 @@
 | 非同步工廠      | 回傳 Promise 的工廠會被型別系統自動追蹤                                                         |
 | 循環依賴偵測    | 包含完整循環路徑的清晰錯誤訊息                                                                  |
 | 選擇性解析      | `tryResolve` 對未註冊令牌回傳 `undefined` 而非拋出例外                                          |
+| 延遲解析        | 透過 `katagami/lazy` 的 `lazy()` 實現基於 Proxy 的延遲實例化;首次存取時建立                     |
 
 ## 安裝
 
@@ -70,15 +71,16 @@ userService.greet('world');
 
 ### Tree Shaking
 
-Katagami 透過子路徑匯出拆分功能。只需匯入你使用的部分——如果不匯入 `katagami/scope` 和 `katagami/disposable`，它們將從套件中完全移除。配合 `sideEffects: false`，建置工具可以移除每一個未使用的位元組。
+Katagami 透過子路徑匯出拆分功能。只需匯入你使用的部分——如果不匯入 `katagami/scope`、`katagami/disposable` 和 `katagami/lazy`，它們將從套件中完全移除。配合 `sideEffects: false`，建置工具可以移除每一個未使用的位元組。
 
 ```ts
-// 僅核心 — scope 和 disposable 不會包含在套件中
+// 僅核心 — scope、disposable 和 lazy 不會包含在套件中
 import { createContainer } from 'katagami';
 
 // 按需匯入
 import { createScope } from 'katagami/scope';
 import { disposable } from 'katagami/disposable';
+import { lazy } from 'katagami/lazy';
 ```
 
 ### 基於類別令牌的完整型別推斷
@@ -340,17 +342,59 @@ container.resolve(Connection); // OK
 container.registerSingleton(/* ... */); // 編譯時錯誤
 ```
 
-### Tree Shaking
+### 延遲解析(Lazy Resolution)
 
-Katagami 使用子路徑匯出將功能拆分為獨立的進入點。如果你只需要核心容器，`katagami/scope` 和 `katagami/disposable` 將從套件中完全排除。套件宣告了 `sideEffects: false`，因此建置工具可以安全地移除任何未使用的程式碼。
+`katagami/lazy` 的 `lazy()` 函式建立一個代理，將實例建立延遲到首次屬性存取時。這對於最佳化啟動時間或打破循環依賴很有用。
 
 ```ts
-// 僅核心 — scope 和 disposable 不會包含在套件中
+import { createContainer } from 'katagami';
+import { lazy } from 'katagami/lazy';
+
+class HeavyService {
+	constructor() {
+		// 昂貴的初始化
+	}
+	process() {
+		return 'done';
+	}
+}
+
+const container = createContainer().registerSingleton(HeavyService, () => new HeavyService());
+
+const service = lazy(container, HeavyService);
+// HeavyService 尚未被實例化
+
+service.process(); // 此處建立實例並快取
+service.process(); // 使用快取的實例
+```
+
+代理會透明地將所有屬性存取、方法呼叫、`in` 檢查和原型查詢轉發到真實實例。方法會自動繫結到真實實例，因此即使解構後 `this` 也能正確運作。
+
+僅支援**同步類別令牌**。由於 Proxy 陷阱是同步的，非同步令牌和 PropertyKey 令牌在型別層級會被拒絕。
+
+`lazy()` 適用於 Container、Scope、DisposableContainer 和 DisposableScope:
+
+```ts
+import { createScope } from 'katagami/scope';
+
+const root = createContainer().registerScoped(RequestContext, () => new RequestContext());
+const scope = createScope(root);
+
+const ctx = lazy(scope, RequestContext); // 延遲的 Scoped 解析
+```
+
+### Tree Shaking
+
+Katagami 使用子路徑匯出將功能拆分為獨立的進入點。如果你只需要核心容器，`katagami/scope`、`katagami/disposable` 和 `katagami/lazy` 將從套件中完全排除。套件宣告了 `sideEffects: false`，因此建置工具可以安全地移除任何未使用的程式碼。
+
+```ts
+// 僅核心 — scope、disposable 和 lazy 不會包含在套件中
 import { createContainer } from 'katagami';
 
 // 按需匯入
 import { createScope } from 'katagami/scope';
 import { disposable } from 'katagami/disposable';
+import { lazy } from 'katagami/lazy';
 ```
 
 ### 介面型別映射
@@ -521,6 +565,10 @@ const container = createContainer()
 ### `Scope.prototype.tryResolve(token)`
 
 嘗試解析給定令牌的實例。如果令牌未註冊，回傳 `undefined` 而不是拋出例外。對於循環依賴或已銷毀作用域的操作仍會拋出 `ContainerError`。
+
+### `lazy(source, token)` — `katagami/lazy`
+
+建立一個 Proxy，將 `resolve()` 延遲到首次屬性存取。已解析的實例會被快取——後續存取使用快取。僅支援同步類別令牌;非同步令牌和 PropertyKey 令牌在型別層級被拒絕。適用於 `Container`、`Scope`、`DisposableContainer` 和 `DisposableScope`。
 
 ### `disposable(container)` — `katagami/disposable`
 
