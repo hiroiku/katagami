@@ -55,7 +55,7 @@ abstract class UnregisteredService {
 // ===========================================================================
 
 {
-	const container = createContainer().registerScoped(ScopedService, () => ({} as ScopedService));
+	const container = createContainer().registerScoped(ScopedService, () => ({}) as ScopedService);
 
 	// @ts-expect-error — scoped class token must be resolved from a Scope, not Container
 	container.resolve(ScopedService);
@@ -77,7 +77,7 @@ abstract class UnregisteredService {
 // ===========================================================================
 
 {
-	const container = createContainer().registerScoped(ScopedService, () => ({} as ScopedService));
+	const container = createContainer().registerScoped(ScopedService, () => ({}) as ScopedService);
 	const scope = container.createScope();
 
 	// OK — scoped tokens are available in a Scope
@@ -101,36 +101,36 @@ abstract class UnregisteredService {
 // ===========================================================================
 
 createContainer()
-	.registerScoped(ScopedService, () => ({} as ScopedService))
+	.registerScoped(ScopedService, () => ({}) as ScopedService)
 	// @ts-expect-error — singleton factory should not be able to resolve scoped token
-	.registerSingleton(ServiceA, r => ({ a: r.resolve(ScopedService).s } as ServiceA));
+	.registerSingleton(ServiceA, r => ({ a: r.resolve(ScopedService).s }) as ServiceA);
 
 // ===========================================================================
 // 7. Transient factory CANNOT resolve a scoped token (captive dependency)
 // ===========================================================================
 
 createContainer()
-	.registerScoped(ScopedService, () => ({} as ScopedService))
+	.registerScoped(ScopedService, () => ({}) as ScopedService)
 	// @ts-expect-error — transient factory should not be able to resolve scoped token
-	.registerTransient(ServiceA, r => ({ a: r.resolve(ScopedService).s } as ServiceA));
+	.registerTransient(ServiceA, r => ({ a: r.resolve(ScopedService).s }) as ServiceA);
 
 // ===========================================================================
 // 8. Scoped factory CAN resolve previously registered scoped tokens
 // ===========================================================================
 
 createContainer()
-	.registerScoped(ScopedService, () => ({} as ScopedService))
+	.registerScoped(ScopedService, () => ({}) as ScopedService)
 	// OK — scoped factory can resolve other scoped tokens
-	.registerScoped(ServiceA, r => ({ a: r.resolve(ScopedService).s } as ServiceA));
+	.registerScoped(ServiceA, r => ({ a: r.resolve(ScopedService).s }) as ServiceA);
 
 // ===========================================================================
 // 9. Scoped factory CAN resolve singleton tokens
 // ===========================================================================
 
 createContainer()
-	.registerSingleton(ServiceA, () => ({} as ServiceA))
+	.registerSingleton(ServiceA, () => ({}) as ServiceA)
 	// OK — scoped factory can resolve singleton tokens
-	.registerScoped(ServiceB, r => ({ b: r.resolve(ServiceA).a } as ServiceB));
+	.registerScoped(ServiceB, r => ({ b: r.resolve(ServiceA).a }) as ServiceB);
 
 // ===========================================================================
 // 10. Method chaining order: factory can only resolve tokens registered BEFORE it
@@ -138,8 +138,8 @@ createContainer()
 
 createContainer()
 	// @ts-expect-error — ServiceB is not registered yet at this point in the chain
-	.registerSingleton(ServiceA, r => ({ a: r.resolve(ServiceB).b } as ServiceA))
-	.registerSingleton(ServiceB, () => ({} as ServiceB));
+	.registerSingleton(ServiceA, r => ({ a: r.resolve(ServiceB).b }) as ServiceA)
+	.registerSingleton(ServiceB, () => ({}) as ServiceB);
 
 // ===========================================================================
 // 11. Mixed lifetimes: scoped dependency graph through a Scope
@@ -147,9 +147,9 @@ createContainer()
 
 {
 	const container = createContainer()
-		.registerSingleton(ServiceA, () => ({} as ServiceA))
-		.registerScoped(ServiceB, r => ({ b: r.resolve(ServiceA).a } as ServiceB))
-		.registerScoped(ServiceC, r => ({ c: r.resolve(ServiceB).b } as ServiceC));
+		.registerSingleton(ServiceA, () => ({}) as ServiceA)
+		.registerScoped(ServiceB, r => ({ b: r.resolve(ServiceA).a }) as ServiceB)
+		.registerScoped(ServiceC, r => ({ c: r.resolve(ServiceB).b }) as ServiceC);
 
 	const scope = container.createScope();
 
@@ -164,7 +164,7 @@ createContainer()
 // ===========================================================================
 
 {
-	const container = createContainer().registerScoped(AsyncService, async () => ({} as AsyncService));
+	const container = createContainer().registerScoped(AsyncService, async () => ({}) as AsyncService);
 
 	// @ts-expect-error — async scoped token must be resolved from a Scope
 	container.resolve(AsyncService);
@@ -175,7 +175,7 @@ createContainer()
 // ===========================================================================
 
 {
-	const container = createContainer().registerScoped(AsyncService, async () => ({} as AsyncService));
+	const container = createContainer().registerScoped(AsyncService, async () => ({}) as AsyncService);
 	const scope = container.createScope();
 
 	// OK — async scoped token is available in a Scope
@@ -188,8 +188,8 @@ createContainer()
 
 {
 	const container = createContainer()
-		.registerSingleton(ServiceA, () => ({} as ServiceA))
-		.registerTransient(ServiceB, () => ({} as ServiceB));
+		.registerSingleton(ServiceA, () => ({}) as ServiceA)
+		.registerTransient(ServiceB, () => ({}) as ServiceB);
 
 	const scope = container.createScope();
 
@@ -204,8 +204,8 @@ createContainer()
 
 {
 	const container = createContainer()
-		.registerSingleton(ServiceA, () => ({} as ServiceA))
-		.registerScoped(ScopedService, () => ({} as ScopedService));
+		.registerSingleton(ServiceA, () => ({}) as ServiceA)
+		.registerScoped(ScopedService, () => ({}) as ScopedService);
 
 	const scope = container.createScope();
 	const nested = scope.createScope();
@@ -222,7 +222,7 @@ createContainer()
 {
 	const container = createContainer()
 		.registerScoped('requestId', () => crypto.randomUUID())
-		.registerScoped(ServiceA, r => ({ a: r.resolve('requestId') } as ServiceA));
+		.registerScoped(ServiceA, r => ({ a: r.resolve('requestId') }) as ServiceA);
 
 	const scope = container.createScope();
 
@@ -236,7 +236,7 @@ createContainer()
 // ===========================================================================
 
 {
-	const container = createContainer().registerSingleton(ServiceA, () => ({} as ServiceA));
+	const container = createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA);
 
 	// OK — tryResolve returns ServiceA | undefined
 	const _result: ServiceA | undefined = container.tryResolve(ServiceA);
@@ -247,7 +247,7 @@ createContainer()
 // ===========================================================================
 
 {
-	const container = createContainer().registerSingleton(AsyncService, async () => ({} as AsyncService));
+	const container = createContainer().registerSingleton(AsyncService, async () => ({}) as AsyncService);
 
 	// OK — tryResolve returns Promise<AsyncService> | undefined
 	const _result: Promise<AsyncService> | undefined = container.tryResolve(AsyncService);
@@ -269,7 +269,7 @@ createContainer()
 // ===========================================================================
 
 {
-	const container = createContainer().registerSingleton(ServiceA, () => ({} as ServiceA));
+	const container = createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA);
 
 	// OK — tryResolve accepts unregistered class tokens (unlike resolve which would error)
 	const _result: UnregisteredService | Promise<UnregisteredService> | undefined =
@@ -281,7 +281,7 @@ createContainer()
 // ===========================================================================
 
 {
-	const container = createContainer().registerSingleton(ServiceA, () => ({} as ServiceA));
+	const container = createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA);
 
 	// OK — tryResolve accepts unregistered string tokens
 	const _result: unknown = container.tryResolve('nonexistent');
@@ -293,8 +293,8 @@ createContainer()
 
 {
 	const container = createContainer()
-		.registerSingleton(ServiceA, () => ({} as ServiceA))
-		.registerScoped(ScopedService, () => ({} as ScopedService));
+		.registerSingleton(ServiceA, () => ({}) as ServiceA)
+		.registerScoped(ScopedService, () => ({}) as ScopedService);
 
 	const scope = container.createScope();
 
@@ -310,7 +310,7 @@ createContainer()
 // ===========================================================================
 
 {
-	const container = createContainer().registerScoped(ScopedService, () => ({} as ScopedService));
+	const container = createContainer().registerScoped(ScopedService, () => ({}) as ScopedService);
 	const scope = container.createScope();
 
 	// OK — tryResolve accepts unregistered class tokens in scope
@@ -322,7 +322,7 @@ createContainer()
 // ===========================================================================
 
 {
-	const container = createContainer().registerScoped(AsyncService, async () => ({} as AsyncService));
+	const container = createContainer().registerScoped(AsyncService, async () => ({}) as AsyncService);
 	const scope = container.createScope();
 
 	// OK — async scoped token via tryResolve
@@ -334,9 +334,9 @@ createContainer()
 // ===========================================================================
 
 createContainer()
-	.registerSingleton(ServiceA, () => ({} as ServiceA))
+	.registerSingleton(ServiceA, () => ({}) as ServiceA)
 	// OK — factory can use tryResolve for optional dependency on a registered token
-	.registerSingleton(ServiceB, r => ({ b: r.tryResolve(ServiceA)?.a ?? 'default' } as ServiceB));
+	.registerSingleton(ServiceB, r => ({ b: r.tryResolve(ServiceA)?.a ?? 'default' }) as ServiceB);
 
 // ===========================================================================
 // 26. tryResolve in factory (Resolver) accepts unregistered tokens

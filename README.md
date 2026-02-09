@@ -20,6 +20,7 @@ Lightweight TypeScript DI container with full type inference.
 | Circular dependency detection | Clear error messages with the full cycle path                                                |
 | Disposable support            | TC39 Explicit Resource Management (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`) |
 | Captive dependency prevention | Singleton/Transient factories cannot access scoped tokens; caught at compile time            |
+| Optional resolution           | `tryResolve` returns `undefined` for unregistered tokens instead of throwing                 |
 | Hybrid token strategy         | Class tokens for strict type safety, PropertyKey tokens for flexibility                      |
 | Interface type map            | Pass an interface to `createContainer<T>()` for order-independent registration               |
 | Zero dependencies             | No decorators, no reflect-metadata, no polyfills                                             |
@@ -334,6 +335,58 @@ const container = createContainer()
 	});
 ```
 
+### Optional Resolution (tryResolve)
+
+When you need to handle optional dependencies or want to check if a token is registered without throwing an error, use `tryResolve`. Unlike `resolve`, it returns `undefined` for unregistered tokens instead of throwing `ContainerError`:
+
+```ts
+import { createContainer } from 'katagami';
+
+class Logger {
+	log(msg: string) {
+		console.log(msg);
+	}
+}
+
+class Analytics {
+	track(event: string) {
+		console.log(`Track: ${event}`);
+	}
+}
+
+const container = createContainer().registerSingleton(Logger, () => new Logger());
+
+// resolve throws for unregistered tokens
+container.resolve(Analytics); // ContainerError: Token "Analytics" is not registered.
+
+// tryResolve returns undefined for unregistered tokens
+const analytics = container.tryResolve(Analytics);
+//    ^? Analytics | undefined
+if (analytics) {
+	analytics.track('event');
+}
+```
+
+`tryResolve` is especially useful for optional dependencies in factories. Unlike `resolve`, it accepts unregistered tokens without compile-time errors:
+
+```ts
+const container = createContainer()
+	.registerSingleton(Logger, () => new Logger())
+	.registerSingleton('UserService', r => {
+		const logger = r.tryResolve(Logger); // Optional dependency
+		const analytics = r.tryResolve(Analytics); // No compile error even though Analytics is not registered
+
+		return {
+			greet(name: string) {
+				logger?.log(`Hello, ${name}`);
+				analytics?.track('user_greeted');
+			},
+		};
+	});
+```
+
+`tryResolve` still throws `ContainerError` for circular dependencies and operations on disposed containers/scopes — only unregistered tokens return `undefined`.
+
 ## API
 
 ### `createContainer<T, ScopedT>()`
@@ -356,13 +409,17 @@ Registers a factory as scoped. Within a scope, the instance is created on the fi
 
 Resolves and returns the instance for the given token. Throws `ContainerError` if the token is not registered or if a circular dependency is detected.
 
+### `container.tryResolve(token)` / `scope.tryResolve(token)`
+
+Attempts to resolve the instance for the given token. Returns `undefined` if the token is not registered, instead of throwing. Still throws `ContainerError` for circular dependencies or operations on disposed containers/scopes.
+
 ### `container.createScope()`
 
 Creates a new `Scope` (child container). The scope inherits all registrations from the parent. Singleton instances are shared with the parent, while scoped instances are local to the scope.
 
 ### `Scope`
 
-A scoped child container created by `createScope()`. Provides `resolve(token)`, `createScope()` (for nested scopes), and `[Symbol.asyncDispose]()`.
+A scoped child container created by `createScope()`. Provides `resolve(token)`, `tryResolve(token)`, `createScope()` (for nested scopes), and `[Symbol.asyncDispose]()`.
 
 ### `container[Symbol.asyncDispose]()` / `scope[Symbol.asyncDispose]()`
 

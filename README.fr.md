@@ -20,6 +20,7 @@ Conteneur DI léger pour TypeScript avec inférence de types complète.
 | Détection des dépendances circulaires | Messages d'erreur clairs avec le chemin complet du cycle                                                             |
 | Support Disposable                    | TC39 Explicit Resource Management (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`)                         |
 | Prévention des dépendances captives   | Les factories Singleton/Transient ne peuvent pas accéder aux tokens Scoped ; détecté à la compilation                |
+| Résolution optionnelle                | `tryResolve` retourne `undefined` pour les tokens non enregistrés au lieu de lever une exception                     |
 | Stratégie de tokens hybride           | Tokens de classe pour une sécurité de types stricte, tokens PropertyKey pour la flexibilité                          |
 | Carte de types par interface          | Passez une interface à `createContainer<T>()` pour un enregistrement indépendant de l'ordre                          |
 | Zéro dépendance                       | Pas de décorateurs, pas de reflect-metadata, pas de polyfills                                                        |
@@ -356,13 +357,17 @@ Enregistre une factory en tant que scoped. Au sein d'un scope, l'instance est cr
 
 Résout et retourne l'instance pour le token donné. Lève une `ContainerError` si le token n'est pas enregistré ou si une dépendance circulaire est détectée.
 
+### `container.tryResolve(token)` / `scope.tryResolve(token)`
+
+Tente de résoudre l'instance pour le token donné. Retourne `undefined` si le token n'est pas enregistré, au lieu de lever une exception. Lève toujours une `ContainerError` pour les dépendances circulaires ou les opérations sur des conteneurs/scopes supprimés.
+
 ### `container.createScope()`
 
 Crée un nouveau `Scope` (conteneur enfant). Le scope hérite de tous les enregistrements du parent. Les instances Singleton sont partagées avec le parent, tandis que les instances Scoped sont locales au scope.
 
 ### `Scope`
 
-Un conteneur enfant avec scope créé par `createScope()`. Fournit `resolve(token)`, `createScope()` (pour les scopes imbriqués) et `[Symbol.asyncDispose]()`.
+Un conteneur enfant avec scope créé par `createScope()`. Fournit `resolve(token)`, `tryResolve(token)`, `createScope()` (pour les scopes imbriqués) et `[Symbol.asyncDispose]()`.
 
 ### `container[Symbol.asyncDispose]()` / `scope[Symbol.asyncDispose]()`
 

@@ -20,6 +20,7 @@ Leichtgewichtiger TypeScript-DI-Container mit vollständiger Typinferenz.
 | Erkennung zirkulärer Abhängigkeiten    | Klare Fehlermeldungen mit dem vollständigen Zykluspfad                                                  |
 | Disposable-Unterstützung               | TC39 Explicit Resource Management (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`)            |
 | Verhinderung gefangener Abhängigkeiten | Singleton-/Transient-Factories können nicht auf Scoped-Token zugreifen; wird zur Kompilierzeit erkannt  |
+| Optionale Auflösung                    | `tryResolve` gibt `undefined` für nicht registrierte Token zurück statt zu werfen                       |
 | Hybride Token-Strategie                | Klassen-Token für strikte Typsicherheit, PropertyKey-Token für Flexibilität                             |
 | Interface-Typ-Map                      | Übergeben Sie ein Interface an `createContainer<T>()` für reihenfolgeunabhängige Registrierung          |
 | Null Abhängigkeiten                    | Keine Decorators, kein reflect-metadata, keine Polyfills                                                |
@@ -334,6 +335,58 @@ const container = createContainer()
 	});
 ```
 
+### Optionale Auflösung (tryResolve)
+
+Wenn Sie optionale Abhängigkeiten handhaben möchten oder prüfen wollen, ob ein Token registriert ist, ohne einen Fehler zu werfen, verwenden Sie `tryResolve`. Im Gegensatz zu `resolve` gibt es `undefined` für nicht registrierte Token zurück, anstatt einen `ContainerError` zu werfen:
+
+```ts
+import { createContainer } from 'katagami';
+
+class Logger {
+	log(msg: string) {
+		console.log(msg);
+	}
+}
+
+class Analytics {
+	track(event: string) {
+		console.log(`Track: ${event}`);
+	}
+}
+
+const container = createContainer().registerSingleton(Logger, () => new Logger());
+
+// resolve wirft für nicht registrierte Token
+container.resolve(Analytics); // ContainerError: Token "Analytics" is not registered.
+
+// tryResolve gibt undefined für nicht registrierte Token zurück
+const analytics = container.tryResolve(Analytics);
+//    ^? Analytics | undefined
+if (analytics) {
+	analytics.track('event');
+}
+```
+
+`tryResolve` ist besonders nützlich für optionale Abhängigkeiten in Factories. Im Gegensatz zu `resolve` akzeptiert es nicht registrierte Token ohne Kompilierungsfehler:
+
+```ts
+const container = createContainer()
+	.registerSingleton(Logger, () => new Logger())
+	.registerSingleton('UserService', r => {
+		const logger = r.tryResolve(Logger); // Optionale Abhängigkeit
+		const analytics = r.tryResolve(Analytics); // Kein Kompilierungsfehler, obwohl Analytics nicht registriert ist
+
+		return {
+			greet(name: string) {
+				logger?.log(`Hello, ${name}`);
+				analytics?.track('user_greeted');
+			},
+		};
+	});
+```
+
+`tryResolve` wirft immer noch einen `ContainerError` bei zirkulären Abhängigkeiten und Operationen auf freigegebenen Containern/Scopes — nur nicht registrierte Token geben `undefined` zurück.
+
 ## API
 
 ### `createContainer<T, ScopedT>()`
@@ -356,13 +409,17 @@ Registriert eine Factory als Scoped. Innerhalb eines Scopes wird die Instanz bei
 
 Löst die Instanz für das gegebene Token auf und gibt sie zurück. Wirft `ContainerError`, wenn das Token nicht registriert ist oder eine zirkuläre Abhängigkeit erkannt wird.
 
+### `container.tryResolve(token)` / `scope.tryResolve(token)`
+
+Versucht, die Instanz für das gegebene Token aufzulösen. Gibt `undefined` zurück, wenn das Token nicht registriert ist, anstatt zu werfen. Wirft immer noch `ContainerError` bei zirkulären Abhängigkeiten oder Operationen auf freigegebenen Containern/Scopes.
+
 ### `container.createScope()`
 
 Erstellt einen neuen `Scope` (Kind-Container). Der Scope erbt alle Registrierungen vom Eltern-Container. Singleton-Instanzen werden mit dem Eltern-Container geteilt, während Scoped-Instanzen lokal zum Scope sind.
 
 ### `Scope`
 
-Ein Scoped-Kind-Container, erstellt durch `createScope()`. Bietet `resolve(token)`, `createScope()` (für verschachtelte Scopes) und `[Symbol.asyncDispose]()`.
+Ein Scoped-Kind-Container, erstellt durch `createScope()`. Bietet `resolve(token)`, `tryResolve(token)`, `createScope()` (für verschachtelte Scopes) und `[Symbol.asyncDispose]()`.
 
 ### `container[Symbol.asyncDispose]()` / `scope[Symbol.asyncDispose]()`
 

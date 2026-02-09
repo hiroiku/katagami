@@ -20,6 +20,7 @@
 | 循环依赖检测    | 包含完整循环路径的清晰错误消息                                                |
 | Disposable 支持 | TC39 显式资源管理（`Symbol.dispose` / `Symbol.asyncDispose` / `await using`） |
 | 捕获依赖防护    | Singleton/Transient 工厂无法访问 Scoped 令牌；在编译时捕获                    |
+| 可选解析        | `tryResolve` 对未注册令牌返回 `undefined` 而非抛出异常                        |
 | 混合令牌策略    | 类令牌提供严格的类型安全，PropertyKey 令牌提供灵活性                          |
 | 接口类型映射    | 向 `createContainer<T>()` 传入接口，实现与注册顺序无关的注册                  |
 | 零依赖          | 无需装饰器、无需 reflect-metadata、无需 polyfill                              |
@@ -334,6 +335,58 @@ const container = createContainer()
 	});
 ```
 
+### 可选解析（tryResolve）
+
+当需要处理可选依赖或想在不抛出错误的情况下检查令牌是否已注册时，使用 `tryResolve`。与 `resolve` 不同，它对未注册的令牌返回 `undefined` 而不是抛出 `ContainerError`：
+
+```ts
+import { createContainer } from 'katagami';
+
+class Logger {
+	log(msg: string) {
+		console.log(msg);
+	}
+}
+
+class Analytics {
+	track(event: string) {
+		console.log(`Track: ${event}`);
+	}
+}
+
+const container = createContainer().registerSingleton(Logger, () => new Logger());
+
+// resolve 对未注册令牌抛出异常
+container.resolve(Analytics); // ContainerError: Token "Analytics" is not registered.
+
+// tryResolve 对未注册令牌返回 undefined
+const analytics = container.tryResolve(Analytics);
+//    ^? Analytics | undefined
+if (analytics) {
+	analytics.track('event');
+}
+```
+
+`tryResolve` 对于工厂中的可选依赖特别有用。与 `resolve` 不同，它接受未注册的令牌而不会产生编译时错误：
+
+```ts
+const container = createContainer()
+	.registerSingleton(Logger, () => new Logger())
+	.registerSingleton('UserService', r => {
+		const logger = r.tryResolve(Logger); // 可选依赖
+		const analytics = r.tryResolve(Analytics); // Analytics 未注册但不会产生编译错误
+
+		return {
+			greet(name: string) {
+				logger?.log(`Hello, ${name}`);
+				analytics?.track('user_greeted');
+			},
+		};
+	});
+```
+
+`tryResolve` 仍会对循环依赖和已销毁容器/作用域的操作抛出 `ContainerError` — 只有未注册的令牌才返回 `undefined`。
+
 ## API
 
 ### `createContainer<T, ScopedT>()`
@@ -356,13 +409,17 @@ const container = createContainer()
 
 解析并返回给定令牌的实例。如果令牌未注册或检测到循环依赖，则抛出 `ContainerError`。
 
+### `container.tryResolve(token)` / `scope.tryResolve(token)`
+
+尝试解析给定令牌的实例。如果令牌未注册，返回 `undefined` 而不是抛出异常。对于循环依赖或已销毁容器/作用域的操作仍会抛出 `ContainerError`。
+
 ### `container.createScope()`
 
 创建新的 `Scope`（子容器）。作用域继承父级的所有注册。Singleton 实例与父级共享，Scoped 实例为作用域本地。
 
 ### `Scope`
 
-由 `createScope()` 创建的作用域子容器。提供 `resolve(token)`、`createScope()`（用于嵌套作用域）和 `[Symbol.asyncDispose]()`。
+由 `createScope()` 创建的作用域子容器。提供 `resolve(token)`、`tryResolve(token)`、`createScope()`（用于嵌套作用域）和 `[Symbol.asyncDispose]()`。
 
 ### `container[Symbol.asyncDispose]()` / `scope[Symbol.asyncDispose]()`
 

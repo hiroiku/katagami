@@ -20,6 +20,7 @@
 | 循環依存の検出           | 循環パスの全体を含む明確なエラーメッセージ                                                    |
 | Disposable サポート      | TC39 Explicit Resource Management（`Symbol.dispose` / `Symbol.asyncDispose` / `await using`） |
 | キャプティブ依存の防止   | Singleton/Transient のファクトリから Scoped トークンへのアクセスをコンパイル時に防止          |
+| オプショナル解決         | `tryResolve` は未登録トークンでスローせず `undefined` を返す                                  |
 | ハイブリッドトークン戦略 | クラストークンで厳密な型安全性、PropertyKey トークンで柔軟性                                  |
 | インターフェース型マップ | `createContainer<T>()` にインターフェースを渡して登録順序非依存に                             |
 | ゼロ依存                 | デコレータ不要、reflect-metadata 不要、ポリフィル不要                                         |
@@ -334,6 +335,58 @@ const container = createContainer()
 	});
 ```
 
+### オプショナル解決（tryResolve）
+
+オプショナル依存を扱いたい場合や、エラーをスローせずにトークンが登録されているかを確認したい場合は、`tryResolve` を使用します。`resolve` と異なり、未登録トークンで `ContainerError` をスローする代わりに `undefined` を返します：
+
+```ts
+import { createContainer } from 'katagami';
+
+class Logger {
+	log(msg: string) {
+		console.log(msg);
+	}
+}
+
+class Analytics {
+	track(event: string) {
+		console.log(`Track: ${event}`);
+	}
+}
+
+const container = createContainer().registerSingleton(Logger, () => new Logger());
+
+// resolve は未登録トークンでスロー
+container.resolve(Analytics); // ContainerError: Token "Analytics" is not registered.
+
+// tryResolve は未登録トークンで undefined を返す
+const analytics = container.tryResolve(Analytics);
+//    ^? Analytics | undefined
+if (analytics) {
+	analytics.track('event');
+}
+```
+
+`tryResolve` はファクトリ内のオプショナル依存に特に便利です。`resolve` と異なり、未登録トークンでもコンパイル時エラーになりません：
+
+```ts
+const container = createContainer()
+	.registerSingleton(Logger, () => new Logger())
+	.registerSingleton('UserService', r => {
+		const logger = r.tryResolve(Logger); // オプショナル依存
+		const analytics = r.tryResolve(Analytics); // Analytics は未登録だがコンパイルエラーにならない
+
+		return {
+			greet(name: string) {
+				logger?.log(`Hello, ${name}`);
+				analytics?.track('user_greeted');
+			},
+		};
+	});
+```
+
+`tryResolve` は循環依存や破棄済みコンテナ/スコープの操作では従来通り `ContainerError` をスローします — `undefined` を返すのは未登録トークンの場合のみです。
+
 ## API
 
 ### `createContainer<T, ScopedT>()`
@@ -356,13 +409,17 @@ const container = createContainer()
 
 指定されたトークンのインスタンスを解決して返します。トークンが未登録の場合、または循環依存が検出された場合に `ContainerError` をスローします。
 
+### `container.tryResolve(token)` / `scope.tryResolve(token)`
+
+指定されたトークンのインスタンスの解決を試みます。トークンが未登録の場合、スローせず `undefined` を返します。循環依存や破棄済みコンテナ/スコープの操作では従来通り `ContainerError` をスローします。
+
 ### `container.createScope()`
 
 新しい `Scope`（子コンテナ）を作成します。スコープは親のすべての登録を継承します。Singleton インスタンスは親と共有され、Scoped インスタンスはスコープ内でローカルになります。
 
 ### `Scope`
 
-`createScope()` で作成されるスコープ付き子コンテナです。`resolve(token)`、`createScope()`（ネストスコープ用）、`[Symbol.asyncDispose]()` を提供します。
+`createScope()` で作成されるスコープ付き子コンテナです。`resolve(token)`、`tryResolve(token)`、`createScope()`（ネストスコープ用）、`[Symbol.asyncDispose]()` を提供します。
 
 ### `container[Symbol.asyncDispose]()` / `scope[Symbol.asyncDispose]()`
 

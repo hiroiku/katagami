@@ -16,9 +16,7 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - run: bun run check
-
-      - run: bun test
+      - run: bun run verify
 
       - name: Get version from package.json
         id: version

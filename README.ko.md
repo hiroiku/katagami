@@ -20,6 +20,7 @@
 | 순환 의존성 감지     | 전체 순환 경로를 포함하는 명확한 오류 메시지                                       |
 | Disposable 지원      | TC39 명시적 리소스 관리 (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`) |
 | 캡티브 의존성 방지   | Singleton/Transient 팩토리는 Scoped 토큰에 접근 불가; 컴파일 타임에 감지           |
+| 선택적 해석          | `tryResolve`는 미등록 토큰 시 throw 대신 `undefined` 반환                          |
 | 하이브리드 토큰 전략 | 클래스 토큰으로 엄격한 타입 안전성, PropertyKey 토큰으로 유연성                    |
 | 인터페이스 타입 맵   | `createContainer<T>()`에 인터페이스를 전달하여 등록 순서 무관한 등록               |
 | 제로 의존성          | 데코레이터 불필요, reflect-metadata 불필요, 폴리필 불필요                          |
@@ -334,6 +335,58 @@ const container = createContainer()
 	});
 ```
 
+### 선택적 해석 (tryResolve)
+
+선택적 의존성을 처리하거나 오류 없이 토큰이 등록되었는지 확인하려면 `tryResolve`를 사용하세요. `resolve`와 달리 미등록 토큰에 대해 `ContainerError`를 throw하는 대신 `undefined`를 반환합니다:
+
+```ts
+import { createContainer } from 'katagami';
+
+class Logger {
+	log(msg: string) {
+		console.log(msg);
+	}
+}
+
+class Analytics {
+	track(event: string) {
+		console.log(`Track: ${event}`);
+	}
+}
+
+const container = createContainer().registerSingleton(Logger, () => new Logger());
+
+// resolve는 미등록 토큰에 대해 throw
+container.resolve(Analytics); // ContainerError: Token "Analytics" is not registered.
+
+// tryResolve는 미등록 토큰에 대해 undefined 반환
+const analytics = container.tryResolve(Analytics);
+//    ^? Analytics | undefined
+if (analytics) {
+	analytics.track('event');
+}
+```
+
+`tryResolve`는 팩토리 내 선택적 의존성에 특히 유용합니다. `resolve`와 달리 미등록 토큰에 대한 컴파일 타임 오류가 발생하지 않습니다:
+
+```ts
+const container = createContainer()
+	.registerSingleton(Logger, () => new Logger())
+	.registerSingleton('UserService', r => {
+		const logger = r.tryResolve(Logger); // 선택적 의존성
+		const analytics = r.tryResolve(Analytics); // Analytics가 미등록이지만 컴파일 오류 없음
+
+		return {
+			greet(name: string) {
+				logger?.log(`Hello, ${name}`);
+				analytics?.track('user_greeted');
+			},
+		};
+	});
+```
+
+`tryResolve`는 순환 의존성과 폐기된 컨테이너/스코프 작업에 대해서는 여전히 `ContainerError`를 throw합니다 — 미등록 토큰만 `undefined`를 반환합니다.
+
 ## API
 
 ### `createContainer<T, ScopedT>()`
@@ -356,13 +409,17 @@ const container = createContainer()
 
 주어진 토큰의 인스턴스를 해석하여 반환합니다. 토큰이 미등록이거나 순환 의존성이 감지되면 `ContainerError`를 throw합니다.
 
+### `container.tryResolve(token)` / `scope.tryResolve(token)`
+
+주어진 토큰의 인스턴스 해석을 시도합니다. 토큰이 미등록이면 throw하는 대신 `undefined`를 반환합니다. 순환 의존성이나 폐기된 컨테이너/스코프 작업에 대해서는 여전히 `ContainerError`를 throw합니다.
+
 ### `container.createScope()`
 
 새로운 `Scope`(자식 컨테이너)를 생성합니다. 스코프는 부모의 모든 등록을 상속합니다. Singleton 인스턴스는 부모와 공유되며, Scoped 인스턴스는 스코프 로컬입니다.
 
 ### `Scope`
 
-`createScope()`로 생성되는 스코프 자식 컨테이너입니다. `resolve(token)`, `createScope()`(중첩 스코프용), `[Symbol.asyncDispose]()`를 제공합니다.
+`createScope()`로 생성되는 스코프 자식 컨테이너입니다. `resolve(token)`, `tryResolve(token)`, `createScope()`(중첩 스코프용), `[Symbol.asyncDispose]()`를 제공합니다.
 
 ### `container[Symbol.asyncDispose]()` / `scope[Symbol.asyncDispose]()`
 
