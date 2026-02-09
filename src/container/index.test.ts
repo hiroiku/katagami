@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { Container, createContainer } from './container';
-import { ContainerError } from './error';
+import { ContainerError } from '../error';
+import { Container, createContainer } from '.';
 
 // Helper classes for testing
 class ServiceA {
@@ -99,26 +99,60 @@ describe('resolve (transient)', () => {
 	});
 });
 
+describe('registration override', () => {
+	test('later registration overrides earlier one for the same token', () => {
+		const container = createContainer()
+			.registerSingleton(ServiceA, () => new ServiceA('first'))
+			.registerSingleton(ServiceA, () => new ServiceA('second'));
+
+		expect(container.resolve(ServiceA).value).toBe('second');
+	});
+
+	test('lifetime can change on override (singleton -> transient)', () => {
+		const container = createContainer()
+			.registerSingleton(ServiceA, () => new ServiceA('singleton'))
+			.registerTransient(ServiceA, () => new ServiceA('transient'));
+
+		const first = container.resolve(ServiceA);
+		const second = container.resolve(ServiceA);
+		expect(first).not.toBe(second);
+	});
+
+	test('lifetime can change on override (transient -> singleton)', () => {
+		const container = createContainer()
+			.registerTransient(ServiceA, () => new ServiceA('transient'))
+			.registerSingleton(ServiceA, () => new ServiceA('singleton'));
+
+		const first = container.resolve(ServiceA);
+		const second = container.resolve(ServiceA);
+		expect(first).toBe(second);
+	});
+});
+
 describe('resolve (unregistered)', () => {
 	test('throws ContainerError for unregistered token', () => {
 		const container = createContainer();
-		expect(() => container.resolve(ServiceA)).toThrow(ContainerError);
+		expect(() => (container as never as { resolve: (t: unknown) => unknown }).resolve(ServiceA)).toThrow(
+			ContainerError,
+		);
 	});
 
 	test('error message includes the token name', () => {
 		const container = createContainer();
-		expect(() => container.resolve(ServiceA)).toThrow('ServiceA');
+		expect(() => (container as never as { resolve: (t: unknown) => unknown }).resolve(ServiceA)).toThrow('ServiceA');
 	});
 
 	test('error message includes symbol description', () => {
 		const container = createContainer();
 		const token = Symbol('myToken');
-		expect(() => container.resolve(token)).toThrow('myToken');
+		expect(() => (container as never as { resolve: (t: unknown) => unknown }).resolve(token)).toThrow('myToken');
 	});
 
 	test('error message includes string token', () => {
 		const container = createContainer();
-		expect(() => container.resolve('unknownService')).toThrow('unknownService');
+		expect(() => (container as never as { resolve: (t: unknown) => unknown }).resolve('unknownService')).toThrow(
+			'unknownService',
+		);
 	});
 });
 
@@ -253,58 +287,106 @@ class CircularZ {
 describe('circular dependency detection', () => {
 	test('detects direct circular dependency (A -> B -> A) with singleton', () => {
 		const container = createContainer()
-			.registerSingleton(CircularA, r => new CircularA(r.resolve(CircularB)))
-			.registerSingleton(CircularB, r => new CircularB(r.resolve(CircularA)));
+			.registerSingleton(
+				CircularA,
+				r => new CircularA((r as never as { resolve: (t: unknown) => CircularB }).resolve(CircularB)),
+			)
+			.registerSingleton(
+				CircularB,
+				r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
+			);
 
 		expect(() => container.resolve(CircularA)).toThrow(ContainerError);
 	});
 
 	test('detects direct circular dependency (A -> B -> A) with transient', () => {
 		const container = createContainer()
-			.registerTransient(CircularA, r => new CircularA(r.resolve(CircularB)))
-			.registerTransient(CircularB, r => new CircularB(r.resolve(CircularA)));
+			.registerTransient(
+				CircularA,
+				r => new CircularA((r as never as { resolve: (t: unknown) => CircularB }).resolve(CircularB)),
+			)
+			.registerTransient(
+				CircularB,
+				r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
+			);
 
 		expect(() => container.resolve(CircularA)).toThrow(ContainerError);
 	});
 
 	test('detects indirect circular dependency (X -> Y -> Z -> X)', () => {
 		const container = createContainer()
-			.registerSingleton(CircularX, r => new CircularX(r.resolve(CircularY)))
-			.registerSingleton(CircularY, r => new CircularY(r.resolve(CircularZ)))
-			.registerSingleton(CircularZ, r => new CircularZ(r.resolve(CircularX)));
+			.registerSingleton(
+				CircularX,
+				r => new CircularX((r as never as { resolve: (t: unknown) => CircularY }).resolve(CircularY)),
+			)
+			.registerSingleton(
+				CircularY,
+				r => new CircularY((r as never as { resolve: (t: unknown) => CircularZ }).resolve(CircularZ)),
+			)
+			.registerSingleton(
+				CircularZ,
+				r => new CircularZ((r as never as { resolve: (t: unknown) => CircularX }).resolve(CircularX)),
+			);
 
 		expect(() => container.resolve(CircularX)).toThrow(ContainerError);
 	});
 
 	test('error message includes "Circular dependency detected"', () => {
 		const container = createContainer()
-			.registerSingleton(CircularA, r => new CircularA(r.resolve(CircularB)))
-			.registerSingleton(CircularB, r => new CircularB(r.resolve(CircularA)));
+			.registerSingleton(
+				CircularA,
+				r => new CircularA((r as never as { resolve: (t: unknown) => CircularB }).resolve(CircularB)),
+			)
+			.registerSingleton(
+				CircularB,
+				r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
+			);
 
 		expect(() => container.resolve(CircularA)).toThrow('Circular dependency detected');
 	});
 
 	test('error message includes the circular path for direct cycle', () => {
 		const container = createContainer()
-			.registerSingleton(CircularA, r => new CircularA(r.resolve(CircularB)))
-			.registerSingleton(CircularB, r => new CircularB(r.resolve(CircularA)));
+			.registerSingleton(
+				CircularA,
+				r => new CircularA((r as never as { resolve: (t: unknown) => CircularB }).resolve(CircularB)),
+			)
+			.registerSingleton(
+				CircularB,
+				r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
+			);
 
 		expect(() => container.resolve(CircularA)).toThrow('CircularA -> CircularB -> CircularA');
 	});
 
 	test('error message includes the circular path for indirect cycle', () => {
 		const container = createContainer()
-			.registerSingleton(CircularX, r => new CircularX(r.resolve(CircularY)))
-			.registerSingleton(CircularY, r => new CircularY(r.resolve(CircularZ)))
-			.registerSingleton(CircularZ, r => new CircularZ(r.resolve(CircularX)));
+			.registerSingleton(
+				CircularX,
+				r => new CircularX((r as never as { resolve: (t: unknown) => CircularY }).resolve(CircularY)),
+			)
+			.registerSingleton(
+				CircularY,
+				r => new CircularY((r as never as { resolve: (t: unknown) => CircularZ }).resolve(CircularZ)),
+			)
+			.registerSingleton(
+				CircularZ,
+				r => new CircularZ((r as never as { resolve: (t: unknown) => CircularX }).resolve(CircularX)),
+			);
 
 		expect(() => container.resolve(CircularX)).toThrow('CircularX -> CircularY -> CircularZ -> CircularX');
 	});
 
 	test('detects circular dependency with async factories', () => {
 		const container = createContainer()
-			.registerSingleton(CircularA, r => new CircularA(r.resolve(CircularB)))
-			.registerSingleton(CircularB, async r => new CircularB(r.resolve(CircularA)));
+			.registerSingleton(
+				CircularA,
+				r => new CircularA((r as never as { resolve: (t: unknown) => CircularB }).resolve(CircularB)),
+			)
+			.registerSingleton(
+				CircularB,
+				async r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
+			);
 
 		expect(() => container.resolve(CircularB)).toThrow('Circular dependency detected');
 	});
@@ -333,9 +415,18 @@ describe('circular dependency detection', () => {
 
 	test('error message shows only the cycle portion when resolving from outside the cycle', () => {
 		const container = createContainer()
-			.registerSingleton(ServiceA, r => new ServiceA((r as never as { resolve: (t: unknown) => unknown }).resolve(CircularA)))
-			.registerSingleton(CircularA, r => new CircularA(r.resolve(CircularB)))
-			.registerSingleton(CircularB, r => new CircularB(r.resolve(CircularA)));
+			.registerSingleton(
+				ServiceA,
+				r => new ServiceA((r as never as { resolve: (t: unknown) => unknown }).resolve(CircularA) as string),
+			)
+			.registerSingleton(
+				CircularA,
+				r => new CircularA((r as never as { resolve: (t: unknown) => CircularB }).resolve(CircularB)),
+			)
+			.registerSingleton(
+				CircularB,
+				r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
+			);
 
 		try {
 			container.resolve(ServiceA);
