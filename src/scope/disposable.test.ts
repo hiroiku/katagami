@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { createContainer } from '../container';
+import { disposable } from '../disposable';
 import { ContainerError } from '../error';
+import { createScope } from '.';
 
 // Helper classes for testing
 class ServiceA {
@@ -36,7 +38,7 @@ class FailingDisposableService {
 describe('Scope [Symbol.asyncDispose]', () => {
 	test('calls [Symbol.dispose]() on scoped instances', async () => {
 		const container = createContainer().registerScoped(DisposableService, () => new DisposableService());
-		const scope = container.createScope();
+		const scope = disposable(createScope(container));
 		const instance = scope.resolve(DisposableService);
 		expect(instance.disposed).toBe(false);
 
@@ -46,7 +48,7 @@ describe('Scope [Symbol.asyncDispose]', () => {
 
 	test('calls [Symbol.asyncDispose]() on scoped instances', async () => {
 		const container = createContainer().registerScoped(AsyncDisposableService, () => new AsyncDisposableService());
-		const scope = container.createScope();
+		const scope = disposable(createScope(container));
 		const instance = scope.resolve(AsyncDisposableService);
 		expect(instance.disposed).toBe(false);
 
@@ -69,7 +71,7 @@ describe('Scope [Symbol.asyncDispose]', () => {
 		}
 
 		const container = createContainer().registerScoped(BothDisposable, () => new BothDisposable());
-		const scope = container.createScope();
+		const scope = disposable(createScope(container));
 		const instance = scope.resolve(BothDisposable);
 
 		await scope[Symbol.asyncDispose]();
@@ -103,7 +105,7 @@ describe('Scope [Symbol.asyncDispose]', () => {
 			.registerScoped(SecondService, () => new SecondService())
 			.registerScoped(ThirdService, () => new ThirdService());
 
-		const scope = container.createScope();
+		const scope = disposable(createScope(container));
 		scope.resolve(FirstService);
 		scope.resolve(SecondService);
 		scope.resolve(ThirdService);
@@ -122,7 +124,7 @@ describe('Scope [Symbol.asyncDispose]', () => {
 		}
 
 		const container = createContainer().registerScoped(CountingDisposable, () => new CountingDisposable());
-		const scope = container.createScope();
+		const scope = disposable(createScope(container));
 		scope.resolve(CountingDisposable);
 
 		await scope[Symbol.asyncDispose]();
@@ -135,7 +137,7 @@ describe('Scope [Symbol.asyncDispose]', () => {
 			.registerSingleton(DisposableService, () => new DisposableService())
 			.registerScoped(AsyncDisposableService, () => new AsyncDisposableService());
 
-		const scope = container.createScope();
+		const scope = disposable(createScope(container));
 		const singleton = scope.resolve(DisposableService);
 		const scoped = scope.resolve(AsyncDisposableService);
 
@@ -149,13 +151,13 @@ describe('Scope [Symbol.asyncDispose]', () => {
 			.registerScoped(NonDisposableService, () => new NonDisposableService())
 			.registerScoped(DisposableService, () => new DisposableService());
 
-		const scope = container.createScope();
+		const scope = disposable(createScope(container));
 		const nonDisposable = scope.resolve(NonDisposableService);
-		const disposable = scope.resolve(DisposableService);
+		const instance = scope.resolve(DisposableService);
 
 		await scope[Symbol.asyncDispose]();
 		expect(nonDisposable.value).toBe('non-disposable');
-		expect(disposable.disposed).toBe(true);
+		expect(instance.disposed).toBe(true);
 	});
 
 	test('disposes async factory instances (Promise-wrapped)', async () => {
@@ -164,7 +166,7 @@ describe('Scope [Symbol.asyncDispose]', () => {
 			async () => new AsyncDisposableService(),
 		);
 
-		const scope = container.createScope();
+		const scope = disposable(createScope(container));
 		const instance = await scope.resolve(AsyncDisposableService);
 
 		await scope[Symbol.asyncDispose]();
@@ -176,9 +178,9 @@ describe('Scope [Symbol.asyncDispose]', () => {
 			.registerScoped(FailingDisposableService, () => new FailingDisposableService())
 			.registerScoped(DisposableService, () => new DisposableService());
 
-		const scope = container.createScope();
+		const scope = disposable(createScope(container));
 		scope.resolve(FailingDisposableService);
-		const disposable = scope.resolve(DisposableService);
+		const instance = scope.resolve(DisposableService);
 
 		try {
 			await scope[Symbol.asyncDispose]();
@@ -187,14 +189,14 @@ describe('Scope [Symbol.asyncDispose]', () => {
 			expect((e as AggregateError).errors).toHaveLength(1);
 		}
 
-		expect(disposable.disposed).toBe(true);
+		expect(instance.disposed).toBe(true);
 	});
 });
 
 describe('Scope [Symbol.asyncDispose] edge cases', () => {
 	test('handles scope with no resolved instances', async () => {
 		const container = createContainer().registerScoped(ServiceA, () => new ServiceA());
-		const scope = container.createScope();
+		const scope = disposable(createScope(container));
 		// Dispose without resolving anything — should not throw
 		await scope[Symbol.asyncDispose]();
 	});
@@ -205,7 +207,7 @@ describe('Scope [Symbol.asyncDispose] edge cases', () => {
 			.registerScoped('num', () => 42)
 			.registerScoped('bool', () => true);
 
-		const scope = container.createScope();
+		const scope = disposable(createScope(container));
 		scope.resolve('str');
 		scope.resolve('num');
 		scope.resolve('bool');
@@ -219,7 +221,7 @@ describe('Scope [Symbol.asyncDispose] edge cases', () => {
 			.registerScoped('nullable', () => null)
 			.registerScoped('undef', () => undefined);
 
-		const scope = container.createScope();
+		const scope = disposable(createScope(container));
 		scope.resolve('nullable');
 		scope.resolve('undef');
 
@@ -244,7 +246,7 @@ describe('Scope [Symbol.asyncDispose] edge cases', () => {
 			.registerScoped(FailA, () => new FailA())
 			.registerScoped(FailB, () => new FailB());
 
-		const scope = container.createScope();
+		const scope = disposable(createScope(container));
 		scope.resolve(FailA);
 		scope.resolve(FailB);
 
@@ -262,7 +264,7 @@ describe('Scope [Symbol.asyncDispose] edge cases', () => {
 describe('disposed scope guards', () => {
 	test('throws ContainerError when resolving from a disposed scope', async () => {
 		const container = createContainer().registerScoped(ServiceA, () => new ServiceA());
-		const scope = container.createScope();
+		const scope = disposable(createScope(container));
 		await scope[Symbol.asyncDispose]();
 
 		expect(() => scope.resolve(ServiceA)).toThrow(ContainerError);
@@ -271,11 +273,11 @@ describe('disposed scope guards', () => {
 
 	test('throws ContainerError when creating nested scope from a disposed scope', async () => {
 		const container = createContainer();
-		const scope = container.createScope();
+		const scope = disposable(createScope(container));
 		await scope[Symbol.asyncDispose]();
 
-		expect(() => scope.createScope()).toThrow(ContainerError);
-		expect(() => scope.createScope()).toThrow('disposed scope');
+		expect(() => createScope(scope)).toThrow(ContainerError);
+		expect(() => createScope(scope)).toThrow('disposed container');
 	});
 });
 
@@ -285,7 +287,7 @@ describe('await using integration (scope)', () => {
 
 		let instance: DisposableService;
 		{
-			await using scope = container.createScope();
+			await using scope = disposable(createScope(container));
 			instance = scope.resolve(DisposableService);
 			expect(instance.disposed).toBe(false);
 		}

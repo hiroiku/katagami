@@ -8,6 +8,8 @@
  *
  * Run with: tsc --noEmit
  */
+
+import { createScope } from '../scope';
 import { createContainer } from '.';
 
 // ---------------------------------------------------------------------------
@@ -78,7 +80,7 @@ abstract class UnregisteredService {
 
 {
 	const container = createContainer().registerScoped(ScopedService, () => ({}) as ScopedService);
-	const scope = container.createScope();
+	const scope = createScope(container);
 
 	// OK — scoped tokens are available in a Scope
 	const _instance: ScopedService = scope.resolve(ScopedService);
@@ -90,7 +92,7 @@ abstract class UnregisteredService {
 
 {
 	const container = createContainer().registerScoped('requestId', () => crypto.randomUUID());
-	const scope = container.createScope();
+	const scope = createScope(container);
 
 	// OK — scoped PropertyKey token is available in a Scope
 	const _id: string = scope.resolve('requestId');
@@ -151,7 +153,7 @@ createContainer()
 		.registerScoped(ServiceB, r => ({ b: r.resolve(ServiceA).a }) as ServiceB)
 		.registerScoped(ServiceC, r => ({ c: r.resolve(ServiceB).b }) as ServiceC);
 
-	const scope = container.createScope();
+	const scope = createScope(container);
 
 	// OK — Scope can resolve both singleton and scoped tokens
 	const _a: ServiceA = scope.resolve(ServiceA);
@@ -176,7 +178,7 @@ createContainer()
 
 {
 	const container = createContainer().registerScoped(AsyncService, async () => ({}) as AsyncService);
-	const scope = container.createScope();
+	const scope = createScope(container);
 
 	// OK — async scoped token is available in a Scope
 	const _promise: Promise<AsyncService> = scope.resolve(AsyncService);
@@ -191,7 +193,7 @@ createContainer()
 		.registerSingleton(ServiceA, () => ({}) as ServiceA)
 		.registerTransient(ServiceB, () => ({}) as ServiceB);
 
-	const scope = container.createScope();
+	const scope = createScope(container);
 
 	// OK — Scope can resolve singleton and transient from parent
 	const _a: ServiceA = scope.resolve(ServiceA);
@@ -207,8 +209,8 @@ createContainer()
 		.registerSingleton(ServiceA, () => ({}) as ServiceA)
 		.registerScoped(ScopedService, () => ({}) as ScopedService);
 
-	const scope = container.createScope();
-	const nested = scope.createScope();
+	const scope = createScope(container);
+	const nested = createScope(scope);
 
 	// OK — nested scope can resolve both singleton and scoped
 	const _a: ServiceA = nested.resolve(ServiceA);
@@ -224,7 +226,7 @@ createContainer()
 		.registerScoped('requestId', () => crypto.randomUUID())
 		.registerScoped(ServiceA, r => ({ a: r.resolve('requestId') }) as ServiceA);
 
-	const scope = container.createScope();
+	const scope = createScope(container);
 
 	// OK — scoped tokens resolvable from Scope
 	const _id: string = scope.resolve('requestId');
@@ -296,7 +298,7 @@ createContainer()
 		.registerSingleton(ServiceA, () => ({}) as ServiceA)
 		.registerScoped(ScopedService, () => ({}) as ScopedService);
 
-	const scope = container.createScope();
+	const scope = createScope(container);
 
 	// OK — tryResolve returns ScopedService | undefined
 	const _scoped: ScopedService | undefined = scope.tryResolve(ScopedService);
@@ -311,7 +313,7 @@ createContainer()
 
 {
 	const container = createContainer().registerScoped(ScopedService, () => ({}) as ScopedService);
-	const scope = container.createScope();
+	const scope = createScope(container);
 
 	// OK — tryResolve accepts unregistered class tokens in scope
 	const _result: UnregisteredService | Promise<UnregisteredService> | undefined = scope.tryResolve(UnregisteredService);
@@ -323,7 +325,7 @@ createContainer()
 
 {
 	const container = createContainer().registerScoped(AsyncService, async () => ({}) as AsyncService);
-	const scope = container.createScope();
+	const scope = createScope(container);
 
 	// OK — async scoped token via tryResolve
 	const _result: Promise<AsyncService> | undefined = scope.tryResolve(AsyncService);

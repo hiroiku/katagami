@@ -1,7 +1,7 @@
 import { ContainerError } from '../error';
+import { type ContainerInternals, INTERNALS } from '../internal';
 import type { AbstractConstructor, Lifetime, Registration, Resolver } from '../resolver';
 import { buildCircularPath, tokenToString } from '../resolver';
-import { Scope } from '../scope';
 
 /**
  * Create a new DI container.
@@ -48,17 +48,32 @@ export class Container<
 	ScopedT = Record<never, never>,
 	ScopedSync extends AbstractConstructor = never,
 	ScopedAsync extends AbstractConstructor = never,
-> implements AsyncDisposable
-{
+> {
 	private readonly registrations: Map<unknown, Registration>;
 	private readonly instances: Map<unknown, unknown>;
 	private readonly resolvingTokens: Set<unknown>;
 	private disposed = false;
 
+	/**
+	 * Internal state accessor for extension modules (scope, disposable).
+	 *
+	 * @internal
+	 */
+	public readonly [INTERNALS]: ContainerInternals;
+
 	public constructor() {
 		this.registrations = new Map();
 		this.instances = new Map();
 		this.resolvingTokens = new Set();
+		this[INTERNALS] = {
+			instances: this.instances,
+			isDisposed: () => this.disposed,
+			markDisposed: () => {
+				this.disposed = true;
+			},
+			ownInstances: this.instances,
+			registrations: this.registrations,
+		};
 	}
 
 	/**
@@ -160,23 +175,6 @@ export class Container<
 	}
 
 	/**
-	 * Create a new scope (child container).
-	 *
-	 * The scope inherits all registrations from this container.
-	 * Singleton instances are shared with the parent, while scoped instances are local to the scope.
-	 *
-	 * @returns A new Scope instance
-	 * @throws ContainerError if the container has been disposed
-	 */
-	public createScope(): Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync> {
-		if (this.disposed) {
-			throw new ContainerError('Cannot create a scope from a disposed container.');
-		}
-
-		return new Scope(this.registrations, this.instances);
-	}
-
-	/**
 	 * Resolve an instance for the given token.
 	 *
 	 * For singleton registrations, creates the instance on the first call and caches it.
@@ -265,54 +263,6 @@ export class Container<
 			return instance;
 		} finally {
 			this.resolvingTokens.delete(token);
-		}
-	}
-
-	/**
-	 * Dispose all singleton instances managed by this container.
-	 *
-	 * Iterates through singleton instances in reverse creation order (LIFO) and calls
-	 * `[Symbol.asyncDispose]()` or `[Symbol.dispose]()` on each instance that implements them.
-	 *
-	 * This method is idempotent — subsequent calls after the first are no-ops.
-	 * After disposal, `resolve()` and `createScope()` will throw `ContainerError`.
-	 *
-	 * @throws AggregateError if one or more instances throw during disposal
-	 */
-	public async [Symbol.asyncDispose](): Promise<void> {
-		if (this.disposed) {
-			return;
-		}
-
-		this.disposed = true;
-
-		const instances = [...this.instances.values()].reverse();
-		const errors: unknown[] = [];
-
-		for (const instance of instances) {
-			try {
-				let resolved: unknown = instance;
-
-				if (instance instanceof Promise) {
-					resolved = await instance;
-				}
-
-				if (resolved != null && typeof resolved === 'object') {
-					if (Symbol.asyncDispose in resolved) {
-						await (resolved as AsyncDisposable)[Symbol.asyncDispose]();
-					} else if (Symbol.dispose in resolved) {
-						(resolved as Disposable)[Symbol.dispose]();
-					}
-				}
-			} catch (error) {
-				errors.push(error);
-			}
-		}
-
-		this.instances.clear();
-
-		if (errors.length > 0) {
-			throw new AggregateError(errors, 'One or more errors occurred during disposal.');
 		}
 	}
 

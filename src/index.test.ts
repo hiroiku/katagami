@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { Container, ContainerError, createContainer, Scope } from './index';
+import { Container, ContainerError, createContainer } from './index';
+import { createScope, Scope } from './scope';
 
 describe('public API exports', () => {
 	test('exports createContainer function', () => {
@@ -13,7 +14,7 @@ describe('public API exports', () => {
 
 	test('exports Scope class', () => {
 		expect(typeof Scope).toBe('function');
-		const scope = createContainer().createScope();
+		const scope = createScope(createContainer());
 		expect(scope).toBeInstanceOf(Scope);
 	});
 
@@ -32,7 +33,7 @@ describe('public API exports', () => {
 		const instance = container.resolve(MyService);
 		expect(instance.value).toBe('hello');
 
-		const scope = container.createScope();
+		const scope = createScope(container);
 		const scopedInstance = scope.resolve(MyService);
 		expect(scopedInstance).toBe(instance);
 	});

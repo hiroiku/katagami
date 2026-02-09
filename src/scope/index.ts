@@ -1,6 +1,48 @@
+import type { Container } from '../container';
 import { ContainerError } from '../error';
+import { type ContainerInternals, INTERNALS } from '../internal';
 import type { AbstractConstructor, Lifetime, Registration, Resolver } from '../resolver';
 import { buildCircularPath, tokenToString } from '../resolver';
+
+/**
+ * Create a new scope (child container) from a Container or an existing Scope.
+ *
+ * The scope inherits all registrations from the source.
+ * Singleton instances are shared with the parent, while scoped instances are local to the scope.
+ *
+ * @param source A Container or Scope to create a child scope from
+ * @returns A new Scope instance
+ * @throws ContainerError if the source has been disposed
+ */
+export function createScope<
+	T,
+	Sync extends AbstractConstructor,
+	Async extends AbstractConstructor,
+	ScopedT,
+	ScopedSync extends AbstractConstructor,
+	ScopedAsync extends AbstractConstructor,
+>(
+	source: Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>,
+): Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
+export function createScope<
+	T,
+	Sync extends AbstractConstructor,
+	Async extends AbstractConstructor,
+	ScopedT,
+	ScopedSync extends AbstractConstructor,
+	ScopedAsync extends AbstractConstructor,
+>(
+	source: Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>,
+): Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
+export function createScope(source: { readonly [INTERNALS]: ContainerInternals }): Scope {
+	const internals = source[INTERNALS];
+
+	if (internals.isDisposed()) {
+		throw new ContainerError('Cannot create a scope from a disposed container.');
+	}
+
+	return new Scope(internals.registrations, internals.instances);
+}
 
 /**
  * Scoped child container.
@@ -23,19 +65,34 @@ export class Scope<
 	ScopedT = Record<never, never>,
 	ScopedSync extends AbstractConstructor = never,
 	ScopedAsync extends AbstractConstructor = never,
-> implements AsyncDisposable
-{
+> {
 	private readonly registrations: Map<unknown, Registration>;
 	private readonly singletonInstances: Map<unknown, unknown>;
 	private readonly scopedInstances: Map<unknown, unknown>;
 	private readonly resolvingTokens: Set<unknown>;
 	private disposed = false;
 
+	/**
+	 * Internal state accessor for extension modules (scope, disposable).
+	 *
+	 * @internal
+	 */
+	public readonly [INTERNALS]: ContainerInternals;
+
 	public constructor(registrations: Map<unknown, Registration>, singletonInstances: Map<unknown, unknown>) {
 		this.registrations = registrations;
 		this.singletonInstances = singletonInstances;
 		this.scopedInstances = new Map();
 		this.resolvingTokens = new Set();
+		this[INTERNALS] = {
+			instances: this.singletonInstances,
+			isDisposed: () => this.disposed,
+			markDisposed: () => {
+				this.disposed = true;
+			},
+			ownInstances: this.scopedInstances,
+			registrations: this.registrations,
+		};
 	}
 
 	/**
@@ -133,71 +190,6 @@ export class Scope<
 			return instance;
 		} finally {
 			this.resolvingTokens.delete(token);
-		}
-	}
-
-	/**
-	 * Create a nested scope.
-	 *
-	 * The nested scope shares singleton instances with the parent but has its own scoped instance cache.
-	 *
-	 * @returns A new Scope instance
-	 * @throws ContainerError if the scope has been disposed
-	 */
-	public createScope(): Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync> {
-		if (this.disposed) {
-			throw new ContainerError('Cannot create a scope from a disposed scope.');
-		}
-
-		return new Scope(this.registrations, this.singletonInstances);
-	}
-
-	/**
-	 * Dispose all scoped instances managed by this scope.
-	 *
-	 * Iterates through scoped instances in reverse creation order (LIFO) and calls
-	 * `[Symbol.asyncDispose]()` or `[Symbol.dispose]()` on each instance that implements them.
-	 * Singleton instances are not disposed as they are owned by the parent container.
-	 *
-	 * This method is idempotent — subsequent calls after the first are no-ops.
-	 * After disposal, `resolve()` and `createScope()` will throw `ContainerError`.
-	 *
-	 * @throws AggregateError if one or more instances throw during disposal
-	 */
-	public async [Symbol.asyncDispose](): Promise<void> {
-		if (this.disposed) {
-			return;
-		}
-
-		this.disposed = true;
-
-		const instances = [...this.scopedInstances.values()].reverse();
-		const errors: unknown[] = [];
-
-		for (const instance of instances) {
-			try {
-				let resolved: unknown = instance;
-
-				if (instance instanceof Promise) {
-					resolved = await instance;
-				}
-
-				if (resolved != null && typeof resolved === 'object') {
-					if (Symbol.asyncDispose in resolved) {
-						await (resolved as AsyncDisposable)[Symbol.asyncDispose]();
-					} else if (Symbol.dispose in resolved) {
-						(resolved as Disposable)[Symbol.dispose]();
-					}
-				}
-			} catch (error) {
-				errors.push(error);
-			}
-		}
-
-		this.scopedInstances.clear();
-
-		if (errors.length > 0) {
-			throw new AggregateError(errors, 'One or more errors occurred during disposal.');
 		}
 	}
 }

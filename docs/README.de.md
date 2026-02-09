@@ -1,4 +1,4 @@
-[English](./README.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [繁體中文](./README.zh-TW.md) | [简体中文](./README.zh-CN.md) | [Español](./README.es.md) | [Deutsch](./README.de.md) | [Français](./README.fr.md)
+[English](../README.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [繁體中文](./README.zh-TW.md) | [简体中文](./README.zh-CN.md) | [Español](./README.es.md) | [Deutsch](./README.de.md) | [Français](./README.fr.md)
 
 # Katagami
 
@@ -112,10 +112,11 @@ container.resolve(RequestHandler) === container.resolve(RequestHandler); // fals
 
 ### Scoped-Lebenszyklus und Kind-Container
 
-Scoped-Registrierungen verhalten sich innerhalb eines Scopes wie Singletons, erzeugen aber in jedem neuen Scope eine neue Instanz. Verwenden Sie `createScope()`, um einen Kind-Container zu erstellen. Scoped-Token können nicht vom Root-Container aufgelöst werden.
+Scoped-Registrierungen verhalten sich innerhalb eines Scopes wie Singletons, erzeugen aber in jedem neuen Scope eine neue Instanz. Importieren Sie `createScope` aus `katagami/scope`, um einen Kind-Container zu erstellen. Scoped-Token können nicht vom Root-Container aufgelöst werden.
 
 ```ts
 import { createContainer } from 'katagami';
+import { createScope } from 'katagami/scope';
 
 class DbPool {
 	constructor(public name = 'main') {}
@@ -130,8 +131,8 @@ const root = createContainer()
 	.registerScoped(RequestContext, () => new RequestContext());
 
 // Einen Scope für jede Anfrage erstellen
-const scope1 = root.createScope();
-const scope2 = root.createScope();
+const scope1 = createScope(root);
+const scope2 = createScope(root);
 
 // Scoped — gleich innerhalb eines Scopes, unterschiedlich zwischen Scopes
 scope1.resolve(RequestContext) === scope1.resolve(RequestContext); // true
@@ -144,8 +145,8 @@ scope1.resolve(DbPool) === scope2.resolve(DbPool); // true
 Scopes können auch verschachtelt werden. Jeder verschachtelte Scope hat seinen eigenen Scoped-Instanz-Cache, während Singletons mit dem Eltern-Scope geteilt werden:
 
 ```ts
-const parentScope = root.createScope();
-const childScope = parentScope.createScope();
+const parentScope = createScope(root);
+const childScope = createScope(parentScope);
 
 // Jeder verschachtelte Scope bekommt eigene Scoped-Instanzen
 parentScope.resolve(RequestContext) === childScope.resolve(RequestContext); // false
@@ -229,10 +230,11 @@ ContainerError: Circular dependency detected: ServiceX -> ServiceY -> ServiceZ -
 
 ### Disposable-Unterstützung
 
-Sowohl `Container` als auch `Scope` implementieren `AsyncDisposable`. Bei der Freigabe werden verwaltete Instanzen in umgekehrter Erstellungsreihenfolge (LIFO) durchlaufen und ihre `[Symbol.asyncDispose]()` oder `[Symbol.dispose]()` Methoden werden automatisch aufgerufen.
+Die Freigabe wird durch den `disposable()`-Wrapper aus `katagami/disposable` bereitgestellt. Das Wrappen eines Containers oder Scopes fügt `[Symbol.asyncDispose]` hinzu und ermöglicht die `await using`-Syntax. Bei der Freigabe werden verwaltete Instanzen in umgekehrter Erstellungsreihenfolge (LIFO) durchlaufen und ihre `[Symbol.asyncDispose]()` oder `[Symbol.dispose]()` Methoden werden automatisch aufgerufen.
 
 ```ts
 import { createContainer } from 'katagami';
+import { disposable } from 'katagami/disposable';
 
 class Connection {
 	async [Symbol.asyncDispose]() {
@@ -241,7 +243,7 @@ class Connection {
 }
 
 // Manuelle Freigabe
-const container = createContainer().registerSingleton(Connection, () => new Connection());
+const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
 
 container.resolve(Connection);
 await container[Symbol.asyncDispose]();
@@ -251,12 +253,15 @@ await container[Symbol.asyncDispose]();
 Mit `await using` werden Scopes am Ende des Blocks automatisch freigegeben:
 
 ```ts
+import { createScope } from 'katagami/scope';
+import { disposable } from 'katagami/disposable';
+
 const root = createContainer()
 	.registerSingleton(DbPool, () => new DbPool())
 	.registerScoped(Connection, () => new Connection());
 
 {
-	await using scope = root.createScope();
+	await using scope = disposable(createScope(root));
 	const conn = scope.resolve(Connection);
 	// ... conn verwenden ...
 } // Scope wird hier freigegeben — Connection wird bereinigt, DbPool nicht
@@ -413,17 +418,17 @@ Löst die Instanz für das gegebene Token auf und gibt sie zurück. Wirft `Conta
 
 Versucht, die Instanz für das gegebene Token aufzulösen. Gibt `undefined` zurück, wenn das Token nicht registriert ist, anstatt zu werfen. Wirft immer noch `ContainerError` bei zirkulären Abhängigkeiten oder Operationen auf freigegebenen Containern/Scopes.
 
-### `container.createScope()`
+### `createScope(source)` — `katagami/scope`
 
-Erstellt einen neuen `Scope` (Kind-Container). Der Scope erbt alle Registrierungen vom Eltern-Container. Singleton-Instanzen werden mit dem Eltern-Container geteilt, während Scoped-Instanzen lokal zum Scope sind.
+Erstellt einen neuen `Scope` (Kind-Container) aus einem `Container` oder einem bestehenden `Scope`.
 
 ### `Scope`
 
-Ein Scoped-Kind-Container, erstellt durch `createScope()`. Bietet `resolve(token)`, `tryResolve(token)`, `createScope()` (für verschachtelte Scopes) und `[Symbol.asyncDispose]()`.
+Ein Scoped-Kind-Container, erstellt durch `createScope()`. Bietet `resolve(token)` und `tryResolve(token)`.
 
-### `container[Symbol.asyncDispose]()` / `scope[Symbol.asyncDispose]()`
+### `disposable(container)` — `katagami/disposable`
 
-Gibt alle verwalteten Instanzen in umgekehrter Erstellungsreihenfolge (LIFO) frei. Ruft `[Symbol.asyncDispose]()` oder `[Symbol.dispose]()` für jede Instanz auf, die diese implementiert. Idempotent — nachfolgende Aufrufe sind No-Ops. Nach der Freigabe werfen `resolve()` und `createScope()` einen `ContainerError`.
+Fügt `[Symbol.asyncDispose]` einem `Container` oder `Scope` hinzu und ermöglicht die `await using`-Syntax. Gibt alle verwalteten Instanzen in umgekehrter Erstellungsreihenfolge (LIFO) frei. Ruft `[Symbol.asyncDispose]()` oder `[Symbol.dispose]()` für jede Instanz auf, die diese implementiert. Idempotent — nachfolgende Aufrufe sind No-Ops. Nach der Freigabe wirft `resolve()` einen `ContainerError`.
 
 ### `ContainerError`
 

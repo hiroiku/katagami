@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { disposable } from '../disposable';
 import { ContainerError } from '../error';
+import { createScope } from '../scope';
 import { createContainer } from '.';
 
 // Helper classes for testing
@@ -31,7 +33,7 @@ class FailingDisposableService {
 
 describe('Container [Symbol.asyncDispose]', () => {
 	test('calls [Symbol.dispose]() on singleton instances', async () => {
-		const container = createContainer().registerSingleton(DisposableService, () => new DisposableService());
+		const container = disposable(createContainer().registerSingleton(DisposableService, () => new DisposableService()));
 		const instance = container.resolve(DisposableService);
 		expect(instance.disposed).toBe(false);
 
@@ -40,7 +42,9 @@ describe('Container [Symbol.asyncDispose]', () => {
 	});
 
 	test('calls [Symbol.asyncDispose]() on singleton instances', async () => {
-		const container = createContainer().registerSingleton(AsyncDisposableService, () => new AsyncDisposableService());
+		const container = disposable(
+			createContainer().registerSingleton(AsyncDisposableService, () => new AsyncDisposableService()),
+		);
 		const instance = container.resolve(AsyncDisposableService);
 
 		await container[Symbol.asyncDispose]();
@@ -62,9 +66,11 @@ describe('Container [Symbol.asyncDispose]', () => {
 			}
 		}
 
-		const container = createContainer()
-			.registerSingleton(FirstService, () => new FirstService())
-			.registerSingleton(SecondService, () => new SecondService());
+		const container = disposable(
+			createContainer()
+				.registerSingleton(FirstService, () => new FirstService())
+				.registerSingleton(SecondService, () => new SecondService()),
+		);
 
 		container.resolve(FirstService);
 		container.resolve(SecondService);
@@ -82,7 +88,9 @@ describe('Container [Symbol.asyncDispose]', () => {
 			}
 		}
 
-		const container = createContainer().registerSingleton(CountingDisposable, () => new CountingDisposable());
+		const container = disposable(
+			createContainer().registerSingleton(CountingDisposable, () => new CountingDisposable()),
+		);
 		container.resolve(CountingDisposable);
 
 		await container[Symbol.asyncDispose]();
@@ -91,9 +99,8 @@ describe('Container [Symbol.asyncDispose]', () => {
 	});
 
 	test('disposes async singleton instances (Promise-wrapped)', async () => {
-		const container = createContainer().registerSingleton(
-			AsyncDisposableService,
-			async () => new AsyncDisposableService(),
+		const container = disposable(
+			createContainer().registerSingleton(AsyncDisposableService, async () => new AsyncDisposableService()),
 		);
 
 		const instance = await container.resolve(AsyncDisposableService);
@@ -103,12 +110,14 @@ describe('Container [Symbol.asyncDispose]', () => {
 	});
 
 	test('continues disposing remaining instances when one throws', async () => {
-		const container = createContainer()
-			.registerSingleton(FailingDisposableService, () => new FailingDisposableService())
-			.registerSingleton(DisposableService, () => new DisposableService());
+		const container = disposable(
+			createContainer()
+				.registerSingleton(FailingDisposableService, () => new FailingDisposableService())
+				.registerSingleton(DisposableService, () => new DisposableService()),
+		);
 
 		container.resolve(FailingDisposableService);
-		const disposable = container.resolve(DisposableService);
+		const instance = container.resolve(DisposableService);
 
 		try {
 			await container[Symbol.asyncDispose]();
@@ -117,21 +126,23 @@ describe('Container [Symbol.asyncDispose]', () => {
 			expect((e as AggregateError).errors).toHaveLength(1);
 		}
 
-		expect(disposable.disposed).toBe(true);
+		expect(instance.disposed).toBe(true);
 	});
 });
 
 describe('Container [Symbol.asyncDispose] edge cases', () => {
 	test('handles container with no resolved instances', async () => {
-		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
+		const container = disposable(createContainer().registerSingleton(ServiceA, () => new ServiceA()));
 		// Dispose without resolving anything — should not throw
 		await container[Symbol.asyncDispose]();
 	});
 
 	test('skips primitive singleton instances', async () => {
-		const container = createContainer()
-			.registerSingleton('str', () => 'hello')
-			.registerSingleton('num', () => 42);
+		const container = disposable(
+			createContainer()
+				.registerSingleton('str', () => 'hello')
+				.registerSingleton('num', () => 42),
+		);
 
 		container.resolve('str');
 		container.resolve('num');
@@ -153,9 +164,11 @@ describe('Container [Symbol.asyncDispose] edge cases', () => {
 			}
 		}
 
-		const container = createContainer()
-			.registerSingleton(FailX, () => new FailX())
-			.registerSingleton(FailY, () => new FailY());
+		const container = disposable(
+			createContainer()
+				.registerSingleton(FailX, () => new FailX())
+				.registerSingleton(FailY, () => new FailY()),
+		);
 
 		container.resolve(FailX);
 		container.resolve(FailY);
@@ -173,7 +186,7 @@ describe('Container [Symbol.asyncDispose] edge cases', () => {
 
 describe('disposed container guards', () => {
 	test('throws ContainerError when resolving from a disposed container', async () => {
-		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
+		const container = disposable(createContainer().registerSingleton(ServiceA, () => new ServiceA()));
 		await container[Symbol.asyncDispose]();
 
 		expect(() => container.resolve(ServiceA)).toThrow(ContainerError);
@@ -181,11 +194,11 @@ describe('disposed container guards', () => {
 	});
 
 	test('throws ContainerError when creating scope from a disposed container', async () => {
-		const container = createContainer();
+		const container = disposable(createContainer());
 		await container[Symbol.asyncDispose]();
 
-		expect(() => container.createScope()).toThrow(ContainerError);
-		expect(() => container.createScope()).toThrow('disposed container');
+		expect(() => createScope(container)).toThrow(ContainerError);
+		expect(() => createScope(container)).toThrow('disposed container');
 	});
 });
 
@@ -193,7 +206,9 @@ describe('await using integration (container)', () => {
 	test('container is automatically disposed at end of block', async () => {
 		let instance: DisposableService;
 		{
-			await using container = createContainer().registerSingleton(DisposableService, () => new DisposableService());
+			await using container = disposable(
+				createContainer().registerSingleton(DisposableService, () => new DisposableService()),
+			);
 			instance = container.resolve(DisposableService);
 			expect(instance.disposed).toBe(false);
 		}

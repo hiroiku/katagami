@@ -1,14 +1,25 @@
 {
 	"name": "katagami",
-	"version": "1.1.0",
+	"version": "2.0.0",
 	"description": "Lightweight DI container for TypeScript and JavaScript — full type inference, no decorators, no reflect-metadata, hybrid class & PropertyKey tokens.",
 	"license": "MIT",
 	"type": "module",
+	"sideEffects": false,
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",
 			"require": "./dist/index.cjs"
+		},
+		"./scope": {
+			"types": "./dist/scope/index.d.ts",
+			"import": "./dist/scope/index.js",
+			"require": "./dist/scope/index.cjs"
+		},
+		"./disposable": {
+			"types": "./dist/disposable/index.d.ts",
+			"import": "./dist/disposable/index.js",
+			"require": "./dist/disposable/index.cjs"
 		}
 	},
 	"main": "./dist/index.cjs",
@@ -34,8 +45,8 @@
 		"clean": "rm -rf dist",
 		"build": "bun run clean && bun run build:types && bun run build:esm && bun run build:cjs",
 		"build:types": "tsc -p tsconfig.build.json",
-		"build:esm": "bun build ./src/index.ts --outdir dist --format esm",
-		"build:cjs": "bun build ./src/index.ts --outfile dist/index.cjs --format cjs",
+		"build:esm": "bun build ./src/index.ts ./src/scope/index.ts ./src/disposable/index.ts --outdir dist --format esm --splitting",
+		"build:cjs": "bun build ./src/index.ts --outfile dist/index.cjs --format cjs && bun build ./src/scope/index.ts --outfile dist/scope/index.cjs --format cjs && bun build ./src/disposable/index.ts --outfile dist/disposable/index.cjs --format cjs",
 		"test": "bun test --coverage --dots",
 		"prepublishOnly": "bun run build",
 		"check": "bun run format",

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { disposable } from '../disposable';
 import { ContainerError } from '../error';
 import { Container, createContainer } from '.';
 
@@ -523,7 +524,7 @@ describe('tryResolve (async)', () => {
 
 describe('tryResolve (error conditions)', () => {
 	test('throws ContainerError for disposed container', async () => {
-		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
+		const container = disposable(createContainer().registerSingleton(ServiceA, () => new ServiceA()));
 		await container[Symbol.asyncDispose]();
 		expect(() => container.tryResolve(ServiceA)).toThrow(ContainerError);
 		expect(() => container.tryResolve(ServiceA)).toThrow('disposed');

@@ -1,4 +1,4 @@
-[English](./README.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [繁體中文](./README.zh-TW.md) | [简体中文](./README.zh-CN.md) | [Español](./README.es.md) | [Deutsch](./README.de.md) | [Français](./README.fr.md)
+[English](../README.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [繁體中文](./README.zh-TW.md) | [简体中文](./README.zh-CN.md) | [Español](./README.es.md) | [Deutsch](./README.de.md) | [Français](./README.fr.md)
 
 # Katagami
 
@@ -112,10 +112,11 @@ container.resolve(RequestHandler) === container.resolve(RequestHandler); // fals
 
 ### Ciclo de vida Scoped y contenedores hijos
 
-Los registros Scoped se comportan como singletons dentro de un scope pero producen una instancia nueva en cada nuevo scope. Usa `createScope()` para crear un contenedor hijo. Los tokens Scoped no pueden resolverse desde el contenedor raíz.
+Los registros Scoped se comportan como singletons dentro de un scope pero producen una instancia nueva en cada nuevo scope. Importa `createScope` desde `katagami/scope` para crear un contenedor hijo. Los tokens Scoped no pueden resolverse desde el contenedor raíz.
 
 ```ts
 import { createContainer } from 'katagami';
+import { createScope } from 'katagami/scope';
 
 class DbPool {
 	constructor(public name = 'main') {}
@@ -130,8 +131,8 @@ const root = createContainer()
 	.registerScoped(RequestContext, () => new RequestContext());
 
 // Crear un scope para cada petición
-const scope1 = root.createScope();
-const scope2 = root.createScope();
+const scope1 = createScope(root);
+const scope2 = createScope(root);
 
 // Scoped — mismo dentro de un scope, diferente entre scopes
 scope1.resolve(RequestContext) === scope1.resolve(RequestContext); // true
@@ -144,8 +145,8 @@ scope1.resolve(DbPool) === scope2.resolve(DbPool); // true
 Los scopes también pueden anidarse. Cada scope anidado tiene su propia caché de instancias Scoped mientras comparte singletons con su padre:
 
 ```ts
-const parentScope = root.createScope();
-const childScope = parentScope.createScope();
+const parentScope = createScope(root);
+const childScope = createScope(parentScope);
 
 // Cada scope anidado obtiene sus propias instancias Scoped
 parentScope.resolve(RequestContext) === childScope.resolve(RequestContext); // false
@@ -229,10 +230,11 @@ ContainerError: Circular dependency detected: ServiceX -> ServiceY -> ServiceZ -
 
 ### Soporte Disposable
 
-Tanto `Container` como `Scope` implementan `AsyncDisposable`. Al ser eliminados, las instancias gestionadas se recorren en orden inverso de creación (LIFO) y sus métodos `[Symbol.asyncDispose]()` o `[Symbol.dispose]()` se llaman automáticamente.
+La eliminación es proporcionada por el wrapper `disposable()` de `katagami/disposable`. Envolver un contenedor o scope le adjunta `[Symbol.asyncDispose]`, habilitando la sintaxis `await using`. Cuando se elimina, las instancias gestionadas se recorren en orden inverso de creación (LIFO) y sus métodos `[Symbol.asyncDispose]()` o `[Symbol.dispose]()` se llaman automáticamente.
 
 ```ts
 import { createContainer } from 'katagami';
+import { disposable } from 'katagami/disposable';
 
 class Connection {
 	async [Symbol.asyncDispose]() {
@@ -241,7 +243,7 @@ class Connection {
 }
 
 // Eliminación manual
-const container = createContainer().registerSingleton(Connection, () => new Connection());
+const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
 
 container.resolve(Connection);
 await container[Symbol.asyncDispose]();
@@ -251,12 +253,15 @@ await container[Symbol.asyncDispose]();
 Con `await using`, los scopes se eliminan automáticamente al final del bloque:
 
 ```ts
+import { createScope } from 'katagami/scope';
+import { disposable } from 'katagami/disposable';
+
 const root = createContainer()
 	.registerSingleton(DbPool, () => new DbPool())
 	.registerScoped(Connection, () => new Connection());
 
 {
-	await using scope = root.createScope();
+	await using scope = disposable(createScope(root));
 	const conn = scope.resolve(Connection);
 	// ... usar conn ...
 } // el scope se elimina aquí — Connection se limpia, DbPool no
@@ -361,17 +366,17 @@ Resuelve y retorna la instancia para el token dado. Lanza `ContainerError` si el
 
 Intenta resolver la instancia para el token dado. Devuelve `undefined` si el token no está registrado, en lugar de lanzar. Aún lanza `ContainerError` para dependencias circulares u operaciones en contenedores/scopes eliminados.
 
-### `container.createScope()`
+### `createScope(source)` — `katagami/scope`
 
-Crea un nuevo `Scope` (contenedor hijo). El scope hereda todos los registros del padre. Las instancias Singleton se comparten con el padre, mientras que las instancias Scoped son locales al scope.
+Crea un nuevo `Scope` (contenedor hijo) a partir de un `Container` o un `Scope` existente.
 
 ### `Scope`
 
-Un contenedor hijo con scope creado por `createScope()`. Proporciona `resolve(token)`, `tryResolve(token)`, `createScope()` (para scopes anidados) y `[Symbol.asyncDispose]()`.
+Un contenedor hijo con scope creado por `createScope()`. Proporciona `resolve(token)` y `tryResolve(token)`.
 
-### `container[Symbol.asyncDispose]()` / `scope[Symbol.asyncDispose]()`
+### `disposable(container)` — `katagami/disposable`
 
-Elimina todas las instancias gestionadas en orden inverso de creación (LIFO). Llama a `[Symbol.asyncDispose]()` o `[Symbol.dispose]()` en cada instancia que los implemente. Idempotente — las llamadas posteriores no hacen nada. Después de la eliminación, `resolve()` y `createScope()` lanzarán `ContainerError`.
+Adjunta `[Symbol.asyncDispose]` a un `Container` o `Scope`, habilitando la sintaxis `await using`. Elimina todas las instancias gestionadas en orden inverso de creación (LIFO). Llama a `[Symbol.asyncDispose]()` o `[Symbol.dispose]()` en cada instancia que los implemente. Idempotente — las llamadas posteriores no hacen nada. Después de la eliminación, `resolve()` lanzará `ContainerError`.
 
 ### `ContainerError`
 

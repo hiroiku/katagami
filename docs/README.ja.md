@@ -1,4 +1,4 @@
-[English](./README.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [繁體中文](./README.zh-TW.md) | [简体中文](./README.zh-CN.md) | [Español](./README.es.md) | [Deutsch](./README.de.md) | [Français](./README.fr.md)
+[English](../README.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [繁體中文](./README.zh-TW.md) | [简体中文](./README.zh-CN.md) | [Español](./README.es.md) | [Deutsch](./README.de.md) | [Français](./README.fr.md)
 
 # Katagami
 
@@ -112,10 +112,11 @@ container.resolve(RequestHandler) === container.resolve(RequestHandler); // fals
 
 ### Scoped ライフタイムと子コンテナ
 
-Scoped 登録はスコープ内では Singleton のように振る舞いますが、新しいスコープでは新しいインスタンスを生成します。`createScope()` で子コンテナを作成します。Scoped トークンはルートコンテナからは解決できません。
+Scoped 登録はスコープ内では Singleton のように振る舞いますが、新しいスコープでは新しいインスタンスを生成します。`katagami/scope` から `createScope` をインポートして子コンテナを作成します。Scoped トークンはルートコンテナからは解決できません。
 
 ```ts
 import { createContainer } from 'katagami';
+import { createScope } from 'katagami/scope';
 
 class DbPool {
 	constructor(public name = 'main') {}
@@ -130,8 +131,8 @@ const root = createContainer()
 	.registerScoped(RequestContext, () => new RequestContext());
 
 // リクエストごとにスコープを作成
-const scope1 = root.createScope();
-const scope2 = root.createScope();
+const scope1 = createScope(root);
+const scope2 = createScope(root);
 
 // Scoped — 同じスコープ内では同一、スコープ間では別インスタンス
 scope1.resolve(RequestContext) === scope1.resolve(RequestContext); // true
@@ -144,8 +145,8 @@ scope1.resolve(DbPool) === scope2.resolve(DbPool); // true
 スコープはネストも可能です。ネストされたスコープは独自の Scoped インスタンスキャッシュを持ちつつ、Singleton は親と共有します：
 
 ```ts
-const parentScope = root.createScope();
-const childScope = parentScope.createScope();
+const parentScope = createScope(root);
+const childScope = createScope(parentScope);
 
 // ネストされたスコープはそれぞれ独自の Scoped インスタンスを持つ
 parentScope.resolve(RequestContext) === childScope.resolve(RequestContext); // false
@@ -229,10 +230,11 @@ ContainerError: Circular dependency detected: ServiceX -> ServiceY -> ServiceZ -
 
 ### Disposable サポート
 
-`Container` と `Scope` は `AsyncDisposable` を実装しています。破棄時に、管理対象のインスタンスを逆順（LIFO）で走査し、`[Symbol.asyncDispose]()` または `[Symbol.dispose]()` を自動的に呼び出します。
+破棄機能は `katagami/disposable` の `disposable()` ラッパーによって提供されます。コンテナまたはスコープをラップすると `[Symbol.asyncDispose]` が付与され、`await using` 構文が使用可能になります。破棄時に、管理対象のインスタンスを生成の逆順（LIFO）で走査し、`[Symbol.asyncDispose]()` または `[Symbol.dispose]()` メソッドを自動的に呼び出します。
 
 ```ts
 import { createContainer } from 'katagami';
+import { disposable } from 'katagami/disposable';
 
 class Connection {
 	async [Symbol.asyncDispose]() {
@@ -241,7 +243,7 @@ class Connection {
 }
 
 // 手動で破棄
-const container = createContainer().registerSingleton(Connection, () => new Connection());
+const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
 
 container.resolve(Connection);
 await container[Symbol.asyncDispose]();
@@ -251,12 +253,15 @@ await container[Symbol.asyncDispose]();
 `await using` を使うと、ブロックの終了時にスコープが自動的に破棄されます：
 
 ```ts
+import { createScope } from 'katagami/scope';
+import { disposable } from 'katagami/disposable';
+
 const root = createContainer()
 	.registerSingleton(DbPool, () => new DbPool())
 	.registerScoped(Connection, () => new Connection());
 
 {
-	await using scope = root.createScope();
+	await using scope = disposable(createScope(root));
 	const conn = scope.resolve(Connection);
 	// ... conn を使用 ...
 } // ここでスコープが破棄される — Connection はクリーンアップされ、DbPool はされない
@@ -413,17 +418,17 @@ const container = createContainer()
 
 指定されたトークンのインスタンスの解決を試みます。トークンが未登録の場合、スローせず `undefined` を返します。循環依存や破棄済みコンテナ/スコープの操作では従来通り `ContainerError` をスローします。
 
-### `container.createScope()`
+### `createScope(source)` — `katagami/scope`
 
-新しい `Scope`（子コンテナ）を作成します。スコープは親のすべての登録を継承します。Singleton インスタンスは親と共有され、Scoped インスタンスはスコープ内でローカルになります。
+`Container` または既存の `Scope` から新しい `Scope`（子コンテナ）を作成します。
 
 ### `Scope`
 
-`createScope()` で作成されるスコープ付き子コンテナです。`resolve(token)`、`tryResolve(token)`、`createScope()`（ネストスコープ用）、`[Symbol.asyncDispose]()` を提供します。
+`createScope()` で作成されるスコープ付き子コンテナです。`resolve(token)` と `tryResolve(token)` を提供します。
 
-### `container[Symbol.asyncDispose]()` / `scope[Symbol.asyncDispose]()`
+### `disposable(container)` — `katagami/disposable`
 
-管理対象のインスタンスを逆順（LIFO）で破棄します。各インスタンスの `[Symbol.asyncDispose]()` または `[Symbol.dispose]()` を呼び出します。冪等 — 2 回目以降の呼び出しは何もしません。破棄後は `resolve()` と `createScope()` が `ContainerError` をスローします。
+`Container` または `Scope` に `[Symbol.asyncDispose]` を付与し、`await using` 構文を使用可能にします。管理対象のインスタンスを逆順（LIFO）で破棄します。各インスタンスの `[Symbol.asyncDispose]()` または `[Symbol.dispose]()` を呼び出します。冪等 — 2 回目以降の呼び出しは何もしません。破棄後は `resolve()` が `ContainerError` をスローします。
 
 ### `ContainerError`
 

@@ -1,4 +1,4 @@
-[English](./README.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [繁體中文](./README.zh-TW.md) | [简体中文](./README.zh-CN.md) | [Español](./README.es.md) | [Deutsch](./README.de.md) | [Français](./README.fr.md)
+[English](../README.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [繁體中文](./README.zh-TW.md) | [简体中文](./README.zh-CN.md) | [Español](./README.es.md) | [Deutsch](./README.de.md) | [Français](./README.fr.md)
 
 # Katagami
 
@@ -112,10 +112,11 @@ container.resolve(RequestHandler) === container.resolve(RequestHandler); // fals
 
 ### Cycle de vie Scoped et conteneurs enfants
 
-Les enregistrements Scoped se comportent comme des singletons au sein d'un scope mais produisent une instance fraîche dans chaque nouveau scope. Utilisez `createScope()` pour créer un conteneur enfant. Les tokens Scoped ne peuvent pas être résolus depuis le conteneur racine.
+Les enregistrements Scoped se comportent comme des singletons au sein d'un scope mais produisent une instance fraîche dans chaque nouveau scope. Importez `createScope` depuis `katagami/scope` pour créer un conteneur enfant. Les tokens Scoped ne peuvent pas être résolus depuis le conteneur racine.
 
 ```ts
 import { createContainer } from 'katagami';
+import { createScope } from 'katagami/scope';
 
 class DbPool {
 	constructor(public name = 'main') {}
@@ -130,8 +131,8 @@ const root = createContainer()
 	.registerScoped(RequestContext, () => new RequestContext());
 
 // Créer un scope pour chaque requête
-const scope1 = root.createScope();
-const scope2 = root.createScope();
+const scope1 = createScope(root);
+const scope2 = createScope(root);
 
 // Scoped — identique au sein d'un scope, différent entre les scopes
 scope1.resolve(RequestContext) === scope1.resolve(RequestContext); // true
@@ -144,8 +145,8 @@ scope1.resolve(DbPool) === scope2.resolve(DbPool); // true
 Les scopes peuvent aussi être imbriqués. Chaque scope imbriqué possède son propre cache d'instances Scoped tout en partageant les singletons avec son parent :
 
 ```ts
-const parentScope = root.createScope();
-const childScope = parentScope.createScope();
+const parentScope = createScope(root);
+const childScope = createScope(parentScope);
 
 // Chaque scope imbriqué obtient ses propres instances Scoped
 parentScope.resolve(RequestContext) === childScope.resolve(RequestContext); // false
@@ -229,10 +230,11 @@ ContainerError: Circular dependency detected: ServiceX -> ServiceY -> ServiceZ -
 
 ### Support Disposable
 
-`Container` et `Scope` implémentent tous deux `AsyncDisposable`. Lors de la suppression, les instances gérées sont parcourues dans l'ordre inverse de création (LIFO) et leurs méthodes `[Symbol.asyncDispose]()` ou `[Symbol.dispose]()` sont appelées automatiquement.
+La suppression est fournie par le wrapper `disposable()` de `katagami/disposable`. Envelopper un conteneur ou un scope lui attache `[Symbol.asyncDispose]`, permettant la syntaxe `await using`. Lors de la suppression, les instances gérées sont parcourues dans l'ordre inverse de création (LIFO) et leurs méthodes `[Symbol.asyncDispose]()` ou `[Symbol.dispose]()` sont appelées automatiquement.
 
 ```ts
 import { createContainer } from 'katagami';
+import { disposable } from 'katagami/disposable';
 
 class Connection {
 	async [Symbol.asyncDispose]() {
@@ -241,7 +243,7 @@ class Connection {
 }
 
 // Suppression manuelle
-const container = createContainer().registerSingleton(Connection, () => new Connection());
+const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
 
 container.resolve(Connection);
 await container[Symbol.asyncDispose]();
@@ -251,12 +253,15 @@ await container[Symbol.asyncDispose]();
 Avec `await using`, les scopes sont automatiquement supprimés à la fin du bloc :
 
 ```ts
+import { createScope } from 'katagami/scope';
+import { disposable } from 'katagami/disposable';
+
 const root = createContainer()
 	.registerSingleton(DbPool, () => new DbPool())
 	.registerScoped(Connection, () => new Connection());
 
 {
-	await using scope = root.createScope();
+	await using scope = disposable(createScope(root));
 	const conn = scope.resolve(Connection);
 	// ... utiliser conn ...
 } // le scope est supprimé ici — Connection est nettoyé, DbPool ne l'est pas
@@ -361,17 +366,17 @@ Résout et retourne l'instance pour le token donné. Lève une `ContainerError` 
 
 Tente de résoudre l'instance pour le token donné. Retourne `undefined` si le token n'est pas enregistré, au lieu de lever une exception. Lève toujours une `ContainerError` pour les dépendances circulaires ou les opérations sur des conteneurs/scopes supprimés.
 
-### `container.createScope()`
+### `createScope(source)` — `katagami/scope`
 
-Crée un nouveau `Scope` (conteneur enfant). Le scope hérite de tous les enregistrements du parent. Les instances Singleton sont partagées avec le parent, tandis que les instances Scoped sont locales au scope.
+Crée un nouveau `Scope` (conteneur enfant) à partir d'un `Container` ou d'un `Scope` existant.
 
 ### `Scope`
 
-Un conteneur enfant avec scope créé par `createScope()`. Fournit `resolve(token)`, `tryResolve(token)`, `createScope()` (pour les scopes imbriqués) et `[Symbol.asyncDispose]()`.
+Un conteneur enfant avec scope créé par `createScope()`. Fournit `resolve(token)` et `tryResolve(token)`.
 
-### `container[Symbol.asyncDispose]()` / `scope[Symbol.asyncDispose]()`
+### `disposable(container)` — `katagami/disposable`
 
-Supprime toutes les instances gérées dans l'ordre inverse de création (LIFO). Appelle `[Symbol.asyncDispose]()` ou `[Symbol.dispose]()` sur chaque instance qui les implémente. Idempotent — les appels suivants sont sans effet. Après la suppression, `resolve()` et `createScope()` lèveront une `ContainerError`.
+Attache `[Symbol.asyncDispose]` à un `Container` ou `Scope`, permettant la syntaxe `await using`. Supprime toutes les instances gérées dans l'ordre inverse de création (LIFO). Appelle `[Symbol.asyncDispose]()` ou `[Symbol.dispose]()` sur chaque instance qui les implémente. Idempotent — les appels suivants sont sans effet. Après la suppression, `resolve()` lèvera une `ContainerError`.
 
 ### `ContainerError`
 

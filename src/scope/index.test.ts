@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { Container, createContainer } from '../container';
 import { ContainerError } from '../error';
-import { Scope } from '.';
+import { createScope, Scope } from '.';
 
 // Helper classes for testing
 class ServiceA {
@@ -46,20 +46,20 @@ describe('registerScoped', () => {
 
 	test('works with class token', () => {
 		const container = createContainer().registerScoped(RequestContext, () => new RequestContext());
-		const scope = container.createScope();
+		const scope = createScope(container);
 		expect(scope.resolve(RequestContext)).toBeInstanceOf(RequestContext);
 	});
 
 	test('works with string token', () => {
 		const container = createContainer().registerScoped('requestId', () => Math.random());
-		const scope = container.createScope();
+		const scope = createScope(container);
 		expect(typeof scope.resolve('requestId')).toBe('number');
 	});
 
 	test('works with Symbol token', () => {
 		const token = Symbol('scopedService');
 		const container = createContainer().registerScoped(token, () => 42);
-		const scope = container.createScope();
+		const scope = createScope(container);
 		expect(scope.resolve(token)).toBe(42);
 	});
 });
@@ -67,19 +67,19 @@ describe('registerScoped', () => {
 describe('createScope', () => {
 	test('returns a Scope instance', () => {
 		const container = createContainer();
-		const scope = container.createScope();
+		const scope = createScope(container);
 		expect(scope).toBeInstanceOf(Scope);
 	});
 
 	test('scope can resolve singleton from parent', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const scope = container.createScope();
+		const scope = createScope(container);
 		expect(scope.resolve(ServiceA)).toBeInstanceOf(ServiceA);
 	});
 
 	test('scope can resolve transient from parent', () => {
 		const container = createContainer().registerTransient(ServiceA, () => new ServiceA());
-		const scope = container.createScope();
+		const scope = createScope(container);
 		expect(scope.resolve(ServiceA)).toBeInstanceOf(ServiceA);
 	});
 });
@@ -87,7 +87,7 @@ describe('createScope', () => {
 describe('resolve (scoped)', () => {
 	test('returns the same instance within the same scope', () => {
 		const container = createContainer().registerScoped(RequestContext, () => new RequestContext());
-		const scope = container.createScope();
+		const scope = createScope(container);
 		const first = scope.resolve(RequestContext);
 		const second = scope.resolve(RequestContext);
 		expect(first).toBe(second);
@@ -95,8 +95,8 @@ describe('resolve (scoped)', () => {
 
 	test('returns different instances in different scopes', () => {
 		const container = createContainer().registerScoped(RequestContext, () => new RequestContext());
-		const scope1 = container.createScope();
-		const scope2 = container.createScope();
+		const scope1 = createScope(container);
+		const scope2 = createScope(container);
 		const instance1 = scope1.resolve(RequestContext);
 		const instance2 = scope2.resolve(RequestContext);
 		expect(instance1).not.toBe(instance2);
@@ -117,14 +117,14 @@ describe('scoped + singleton interaction', () => {
 	test('scope returns the same singleton as the parent container', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
 		const rootInstance = container.resolve(ServiceA);
-		const scope = container.createScope();
+		const scope = createScope(container);
 		const scopeInstance = scope.resolve(ServiceA);
 		expect(scopeInstance).toBe(rootInstance);
 	});
 
 	test('singletons created in scope are shared with the parent', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const scope = container.createScope();
+		const scope = createScope(container);
 		const scopeInstance = scope.resolve(ServiceA);
 		const rootInstance = container.resolve(ServiceA);
 		expect(scopeInstance).toBe(rootInstance);
@@ -132,8 +132,8 @@ describe('scoped + singleton interaction', () => {
 
 	test('singletons are shared across different scopes', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const scope1 = container.createScope();
-		const scope2 = container.createScope();
+		const scope1 = createScope(container);
+		const scope2 = createScope(container);
 		const instance1 = scope1.resolve(ServiceA);
 		const instance2 = scope2.resolve(ServiceA);
 		expect(instance1).toBe(instance2);
@@ -148,7 +148,7 @@ describe('scoped + singleton interaction', () => {
 			)
 			.registerScoped(RequestContext, () => new RequestContext());
 
-		const scope = container.createScope();
+		const scope = createScope(container);
 		const repo = scope.resolve(UserRepository);
 		expect(repo).toBeInstanceOf(UserRepository);
 		expect(repo.ctx).toBeInstanceOf(RequestContext);
@@ -158,7 +158,7 @@ describe('scoped + singleton interaction', () => {
 describe('scoped + transient interaction', () => {
 	test('transient creates new instances even within a scope', () => {
 		const container = createContainer().registerTransient(ServiceA, () => new ServiceA());
-		const scope = container.createScope();
+		const scope = createScope(container);
 		const first = scope.resolve(ServiceA);
 		const second = scope.resolve(ServiceA);
 		expect(first).not.toBe(second);
@@ -168,8 +168,8 @@ describe('scoped + transient interaction', () => {
 describe('nested scopes', () => {
 	test('nested scope has its own scoped cache', () => {
 		const container = createContainer().registerScoped(RequestContext, () => new RequestContext());
-		const parentScope = container.createScope();
-		const childScope = parentScope.createScope();
+		const parentScope = createScope(container);
+		const childScope = createScope(parentScope);
 		const parentInstance = parentScope.resolve(RequestContext);
 		const childInstance = childScope.resolve(RequestContext);
 		expect(parentInstance).not.toBe(childInstance);
@@ -177,8 +177,8 @@ describe('nested scopes', () => {
 
 	test('nested scope shares singleton instances', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const parentScope = container.createScope();
-		const childScope = parentScope.createScope();
+		const parentScope = createScope(container);
+		const childScope = createScope(parentScope);
 		const parentInstance = parentScope.resolve(ServiceA);
 		const childInstance = childScope.resolve(ServiceA);
 		expect(parentInstance).toBe(childInstance);
@@ -186,8 +186,8 @@ describe('nested scopes', () => {
 
 	test('nested scope returns a Scope instance', () => {
 		const container = createContainer();
-		const scope = container.createScope();
-		const nested = scope.createScope();
+		const scope = createScope(container);
+		const nested = createScope(scope);
 		expect(nested).toBeInstanceOf(Scope);
 	});
 });
@@ -204,7 +204,7 @@ describe('scoped + circular dependency detection', () => {
 				r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
 			);
 
-		const scope = container.createScope();
+		const scope = createScope(container);
 		expect(() => scope.resolve(CircularA)).toThrow(ContainerError);
 		expect(() => scope.resolve(CircularA)).toThrow('Circular dependency detected');
 	});
@@ -220,7 +220,7 @@ describe('scoped + circular dependency detection', () => {
 				r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
 			);
 
-		const scope = container.createScope();
+		const scope = createScope(container);
 		expect(() => scope.resolve(CircularA)).toThrow('CircularA -> CircularB -> CircularA');
 	});
 
@@ -235,7 +235,7 @@ describe('scoped + circular dependency detection', () => {
 				r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
 			);
 
-		const scope = container.createScope();
+		const scope = createScope(container);
 		expect(() => scope.resolve(CircularA)).toThrow('Circular dependency detected');
 	});
 });
@@ -243,7 +243,7 @@ describe('scoped + circular dependency detection', () => {
 describe('scoped + async factory', () => {
 	test('async scoped factory resolves within scope', async () => {
 		const container = createContainer().registerScoped(AsyncService, async () => new AsyncService('scoped-async'));
-		const scope = container.createScope();
+		const scope = createScope(container);
 		const result = scope.resolve(AsyncService);
 		expect(result).toBeInstanceOf(Promise);
 		const instance = await result;
@@ -253,7 +253,7 @@ describe('scoped + async factory', () => {
 
 	test('async scoped returns the same Promise within the same scope', () => {
 		const container = createContainer().registerScoped(AsyncService, async () => new AsyncService('scoped-async'));
-		const scope = container.createScope();
+		const scope = createScope(container);
 		const first = scope.resolve(AsyncService);
 		const second = scope.resolve(AsyncService);
 		expect(first).toBe(second);
@@ -261,8 +261,8 @@ describe('scoped + async factory', () => {
 
 	test('async scoped returns different Promises in different scopes', () => {
 		const container = createContainer().registerScoped(AsyncService, async () => new AsyncService('scoped-async'));
-		const scope1 = container.createScope();
-		const scope2 = container.createScope();
+		const scope1 = createScope(container);
+		const scope2 = createScope(container);
 		const first = scope1.resolve(AsyncService);
 		const second = scope2.resolve(AsyncService);
 		expect(first).not.toBe(second);
@@ -272,7 +272,7 @@ describe('scoped + async factory', () => {
 describe('scope + unregistered token', () => {
 	test('throws ContainerError for unregistered token in scope', () => {
 		const container = createContainer();
-		const scope = container.createScope();
+		const scope = createScope(container);
 		expect(() => (scope as never as { resolve: (t: unknown) => unknown }).resolve(ServiceA)).toThrow(ContainerError);
 		expect(() => (scope as never as { resolve: (t: unknown) => unknown }).resolve(ServiceA)).toThrow('ServiceA');
 	});
@@ -284,7 +284,7 @@ describe('scoped registration override', () => {
 			.registerScoped(RequestContext, () => new RequestContext(1))
 			.registerScoped(RequestContext, () => new RequestContext(2));
 
-		const scope = container.createScope();
+		const scope = createScope(container);
 		expect(scope.resolve(RequestContext).id).toBe(2);
 	});
 });
@@ -296,7 +296,7 @@ describe('scope + dependency graph', () => {
 			.registerScoped(ServiceB, r => new ServiceB(r.resolve(ServiceA)))
 			.registerScoped(ServiceC, r => new ServiceC(r.resolve(ServiceB)));
 
-		const scope = container.createScope();
+		const scope = createScope(container);
 		const c = scope.resolve(ServiceC);
 		expect(c).toBeInstanceOf(ServiceC);
 		expect(c.b).toBeInstanceOf(ServiceB);
@@ -309,7 +309,7 @@ describe('scope + dependency graph', () => {
 			.registerScoped(RequestContext, () => new RequestContext())
 			.registerScoped(UserRepository, r => new UserRepository(r.resolve(RequestContext)));
 
-		const scope = container.createScope();
+		const scope = createScope(container);
 		const ctx = scope.resolve(RequestContext);
 		const repo = scope.resolve(UserRepository);
 		expect(repo.ctx).toBe(ctx);
@@ -324,14 +324,14 @@ class Unregistered {
 describe('tryResolve (scoped)', () => {
 	test('returns the instance for a registered scoped class token', () => {
 		const container = createContainer().registerScoped(RequestContext, () => new RequestContext());
-		const scope = container.createScope();
+		const scope = createScope(container);
 		const instance = scope.tryResolve(RequestContext);
 		expect(instance).toBeInstanceOf(RequestContext);
 	});
 
 	test('returns the same cached instance within the same scope', () => {
 		const container = createContainer().registerScoped(RequestContext, () => new RequestContext());
-		const scope = container.createScope();
+		const scope = createScope(container);
 		const first = scope.tryResolve(RequestContext);
 		const second = scope.tryResolve(RequestContext);
 		expect(first).toBe(second);
@@ -339,8 +339,8 @@ describe('tryResolve (scoped)', () => {
 
 	test('returns different instances in different scopes', () => {
 		const container = createContainer().registerScoped(RequestContext, () => new RequestContext());
-		const scope1 = container.createScope();
-		const scope2 = container.createScope();
+		const scope1 = createScope(container);
+		const scope2 = createScope(container);
 		const instance1 = scope1.tryResolve(RequestContext);
 		const instance2 = scope2.tryResolve(RequestContext);
 		expect(instance1).not.toBe(instance2);
@@ -348,14 +348,14 @@ describe('tryResolve (scoped)', () => {
 
 	test('works with string token', () => {
 		const container = createContainer().registerScoped('requestId', () => Math.random());
-		const scope = container.createScope();
+		const scope = createScope(container);
 		expect(typeof scope.tryResolve('requestId')).toBe('number');
 	});
 
 	test('works with Symbol token', () => {
 		const token = Symbol('scopedService');
 		const container = createContainer().registerScoped(token, () => 42);
-		const scope = container.createScope();
+		const scope = createScope(container);
 		expect(scope.tryResolve(token)).toBe(42);
 	});
 });
@@ -364,14 +364,14 @@ describe('tryResolve (scope + singleton)', () => {
 	test('returns the singleton from parent via tryResolve', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
 		const rootInstance = container.resolve(ServiceA);
-		const scope = container.createScope();
+		const scope = createScope(container);
 		const scopeInstance = scope.tryResolve(ServiceA);
 		expect(scopeInstance).toBe(rootInstance);
 	});
 
 	test('returns the transient instance via tryResolve', () => {
 		const container = createContainer().registerTransient(ServiceA, () => new ServiceA());
-		const scope = container.createScope();
+		const scope = createScope(container);
 		const instance = scope.tryResolve(ServiceA);
 		expect(instance).toBeInstanceOf(ServiceA);
 	});
@@ -380,19 +380,19 @@ describe('tryResolve (scope + singleton)', () => {
 describe('tryResolve (scope + unregistered)', () => {
 	test('returns undefined for unregistered class token', () => {
 		const container = createContainer();
-		const scope = container.createScope();
+		const scope = createScope(container);
 		expect(scope.tryResolve(Unregistered)).toBeUndefined();
 	});
 
 	test('returns undefined for unregistered string token', () => {
 		const container = createContainer();
-		const scope = container.createScope();
+		const scope = createScope(container);
 		expect(scope.tryResolve('nonexistent')).toBeUndefined();
 	});
 
 	test('returns undefined for unregistered Symbol token', () => {
 		const container = createContainer();
-		const scope = container.createScope();
+		const scope = createScope(container);
 		const token = Symbol('unknown');
 		expect(scope.tryResolve(token)).toBeUndefined();
 	});
@@ -401,7 +401,7 @@ describe('tryResolve (scope + unregistered)', () => {
 describe('tryResolve (scope + async)', () => {
 	test('returns a Promise for async scoped token', async () => {
 		const container = createContainer().registerScoped(AsyncService, async () => new AsyncService('scoped-async'));
-		const scope = container.createScope();
+		const scope = createScope(container);
 		const result = scope.tryResolve(AsyncService);
 		expect(result).toBeInstanceOf(Promise);
 		const instance = await (result as Promise<AsyncService>);
@@ -413,7 +413,8 @@ describe('tryResolve (scope + async)', () => {
 describe('tryResolve (scope + error conditions)', () => {
 	test('throws ContainerError for disposed scope', async () => {
 		const container = createContainer().registerScoped(RequestContext, () => new RequestContext());
-		const scope = container.createScope();
+		const { disposable } = await import('../disposable');
+		const scope = disposable(createScope(container));
 		await scope[Symbol.asyncDispose]();
 		expect(() => scope.tryResolve(RequestContext)).toThrow(ContainerError);
 		expect(() => scope.tryResolve(RequestContext)).toThrow('disposed');
@@ -430,7 +431,7 @@ describe('tryResolve (scope + error conditions)', () => {
 				r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
 			);
 
-		const scope = container.createScope();
+		const scope = createScope(container);
 		expect(() => scope.tryResolve(CircularA)).toThrow(ContainerError);
 		expect(() => scope.tryResolve(CircularA)).toThrow('Circular dependency detected');
 	});
@@ -443,7 +444,7 @@ describe('tryResolve (scope + dependency graph)', () => {
 			.registerScoped(ServiceB, r => new ServiceB(r.resolve(ServiceA)))
 			.registerScoped(ServiceC, r => new ServiceC(r.resolve(ServiceB)));
 
-		const scope = container.createScope();
+		const scope = createScope(container);
 		const c = scope.tryResolve(ServiceC) as ServiceC;
 		expect(c).toBeInstanceOf(ServiceC);
 		expect(c.b).toBeInstanceOf(ServiceB);

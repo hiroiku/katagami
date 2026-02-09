@@ -1,4 +1,4 @@
-[English](./README.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [繁體中文](./README.zh-TW.md) | [简体中文](./README.zh-CN.md) | [Español](./README.es.md) | [Deutsch](./README.de.md) | [Français](./README.fr.md)
+[English](../README.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [繁體中文](./README.zh-TW.md) | [简体中文](./README.zh-CN.md) | [Español](./README.es.md) | [Deutsch](./README.de.md) | [Français](./README.fr.md)
 
 # Katagami
 
@@ -112,10 +112,11 @@ container.resolve(RequestHandler) === container.resolve(RequestHandler); // fals
 
 ### Scoped 生命週期與子容器
 
-Scoped 註冊在作用域內表現得像 Singleton，但在每個新作用域中會產生新的實例。使用 `createScope()` 建立子容器。Scoped 令牌無法從根容器解析。
+Scoped 註冊在作用域內表現得像 Singleton，但在每個新作用域中會產生新的實例。從 `katagami/scope` 匯入 `createScope` 來建立子容器。Scoped 令牌無法從根容器解析。
 
 ```ts
 import { createContainer } from 'katagami';
+import { createScope } from 'katagami/scope';
 
 class DbPool {
 	constructor(public name = 'main') {}
@@ -130,8 +131,8 @@ const root = createContainer()
 	.registerScoped(RequestContext, () => new RequestContext());
 
 // 為每個請求建立作用域
-const scope1 = root.createScope();
-const scope2 = root.createScope();
+const scope1 = createScope(root);
+const scope2 = createScope(root);
 
 // Scoped — 同一作用域內相同，不同作用域間不同
 scope1.resolve(RequestContext) === scope1.resolve(RequestContext); // true
@@ -144,8 +145,8 @@ scope1.resolve(DbPool) === scope2.resolve(DbPool); // true
 作用域也可以巢狀。每個巢狀的作用域擁有自己的 Scoped 實例快取，同時與父級共享 Singleton：
 
 ```ts
-const parentScope = root.createScope();
-const childScope = parentScope.createScope();
+const parentScope = createScope(root);
+const childScope = createScope(parentScope);
 
 // 每個巢狀作用域獲得獨立的 Scoped 實例
 parentScope.resolve(RequestContext) === childScope.resolve(RequestContext); // false
@@ -229,10 +230,11 @@ ContainerError: Circular dependency detected: ServiceX -> ServiceY -> ServiceZ -
 
 ### Disposable 支援
 
-`Container` 和 `Scope` 都實作了 `AsyncDisposable`。銷毀時，託管實例按建立的逆序（LIFO）遍歷，並自動呼叫其 `[Symbol.asyncDispose]()` 或 `[Symbol.dispose]()` 方法。
+銷毀功能由 `katagami/disposable` 的 `disposable()` 包裝器提供。包裝容器或作用域會附加 `[Symbol.asyncDispose]`，啟用 `await using` 語法。銷毀時，託管實例按建立的逆序（LIFO）遍歷，並自動呼叫其 `[Symbol.asyncDispose]()` 或 `[Symbol.dispose]()` 方法。
 
 ```ts
 import { createContainer } from 'katagami';
+import { disposable } from 'katagami/disposable';
 
 class Connection {
 	async [Symbol.asyncDispose]() {
@@ -241,7 +243,7 @@ class Connection {
 }
 
 // 手動銷毀
-const container = createContainer().registerSingleton(Connection, () => new Connection());
+const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
 
 container.resolve(Connection);
 await container[Symbol.asyncDispose]();
@@ -251,12 +253,15 @@ await container[Symbol.asyncDispose]();
 使用 `await using` 時，作用域在區塊結束時自動銷毀：
 
 ```ts
+import { createScope } from 'katagami/scope';
+import { disposable } from 'katagami/disposable';
+
 const root = createContainer()
 	.registerSingleton(DbPool, () => new DbPool())
 	.registerScoped(Connection, () => new Connection());
 
 {
-	await using scope = root.createScope();
+	await using scope = disposable(createScope(root));
 	const conn = scope.resolve(Connection);
 	// ... 使用 conn ...
 } // 此處作用域被銷毀 — Connection 被清理，DbPool 不受影響
@@ -413,17 +418,17 @@ const container = createContainer()
 
 嘗試解析給定令牌的實例。如果令牌未註冊，回傳 `undefined` 而不是拋出例外。對於循環依賴或已銷毀容器/作用域的操作仍會拋出 `ContainerError`。
 
-### `container.createScope()`
+### `createScope(source)` — `katagami/scope`
 
-建立新的 `Scope`（子容器）。作用域繼承父級的所有註冊。Singleton 實例與父級共享，Scoped 實例為作用域本地。
+從 `Container` 或現有的 `Scope` 建立新的 `Scope`（子容器）。
 
 ### `Scope`
 
-由 `createScope()` 建立的作用域子容器。提供 `resolve(token)`、`tryResolve(token)`、`createScope()`（用於巢狀作用域）和 `[Symbol.asyncDispose]()`。
+由 `createScope()` 建立的作用域子容器。提供 `resolve(token)` 和 `tryResolve(token)`。
 
-### `container[Symbol.asyncDispose]()` / `scope[Symbol.asyncDispose]()`
+### `disposable(container)` — `katagami/disposable`
 
-按建立的逆序（LIFO）銷毀所有託管實例。呼叫每個實例的 `[Symbol.asyncDispose]()` 或 `[Symbol.dispose]()`。冪等——後續呼叫為空操作。銷毀後，`resolve()` 和 `createScope()` 將拋出 `ContainerError`。
+為 `Container` 或 `Scope` 附加 `[Symbol.asyncDispose]`，啟用 `await using` 語法。按建立的逆序（LIFO）銷毀所有託管實例。呼叫每個實例的 `[Symbol.asyncDispose]()` 或 `[Symbol.dispose]()`。冪等——後續呼叫為空操作。銷毀後，`resolve()` 將拋出 `ContainerError`。
 
 ### `ContainerError`
 
