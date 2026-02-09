@@ -436,6 +436,21 @@ describe('circular dependency detection', () => {
 			expect((e as ContainerError).message).toBe('Circular dependency detected: CircularA -> CircularB -> CircularA');
 		}
 	});
+
+	test('detects self-referencing circular dependency (A -> A)', () => {
+		class SelfRef {
+			public constructor(public self: SelfRef) {}
+		}
+
+		const container = createContainer().registerSingleton(
+			SelfRef,
+			r => new SelfRef((r as never as { resolve: (t: unknown) => SelfRef }).resolve(SelfRef)),
+		);
+
+		expect(() => container.resolve(SelfRef)).toThrow(ContainerError);
+		expect(() => container.resolve(SelfRef)).toThrow('Circular dependency detected');
+		expect(() => container.resolve(SelfRef)).toThrow('SelfRef -> SelfRef');
+	});
 });
 
 // Helper class for tryResolve tests
@@ -564,5 +579,189 @@ describe('tryResolve (dependency graph)', () => {
 		expect(c).toBeInstanceOf(ServiceC);
 		expect(c.b).toBeInstanceOf(ServiceB);
 		expect(c.b.a).toBeInstanceOf(ServiceA);
+	});
+});
+
+describe('factory error recovery', () => {
+	test('propagates factory error to the caller', () => {
+		const container = createContainer().registerSingleton(ServiceA, () => {
+			throw new Error('factory failed');
+		});
+
+		expect(() => container.resolve(ServiceA)).toThrow('factory failed');
+	});
+
+	test('retries resolution after factory throws — no false circular dependency', () => {
+		let callCount = 0;
+		const container = createContainer().registerSingleton(ServiceA, () => {
+			callCount++;
+			if (callCount === 1) {
+				throw new Error('first attempt failed');
+			}
+			return new ServiceA('recovered');
+		});
+
+		expect(() => container.resolve(ServiceA)).toThrow('first attempt failed');
+
+		// Second resolve should retry the factory, not throw circular dependency error
+		const instance = container.resolve(ServiceA);
+		expect(instance).toBeInstanceOf(ServiceA);
+		expect(instance.value).toBe('recovered');
+		expect(callCount).toBe(2);
+	});
+
+	test('singleton is not cached when factory throws', () => {
+		let callCount = 0;
+		const container = createContainer().registerSingleton(ServiceA, () => {
+			callCount++;
+			if (callCount === 1) {
+				throw new Error('init failed');
+			}
+			return new ServiceA('success');
+		});
+
+		expect(() => container.resolve(ServiceA)).toThrow('init failed');
+		expect(callCount).toBe(1);
+
+		// Factory should be called again since no instance was cached
+		const instance = container.resolve(ServiceA);
+		expect(instance.value).toBe('success');
+		expect(callCount).toBe(2);
+	});
+
+	test('transient factory error does not affect subsequent resolves', () => {
+		let callCount = 0;
+		const container = createContainer().registerTransient(ServiceA, () => {
+			callCount++;
+			if (callCount === 1) {
+				throw new Error('transient failed');
+			}
+			return new ServiceA('ok');
+		});
+
+		expect(() => container.resolve(ServiceA)).toThrow('transient failed');
+
+		const instance = container.resolve(ServiceA);
+		expect(instance.value).toBe('ok');
+	});
+});
+
+describe('singleton caching edge cases', () => {
+	test('null singleton is cached — factory is called only once', () => {
+		let callCount = 0;
+		const container = createContainer().registerSingleton('nullable', () => {
+			callCount++;
+			return null;
+		});
+
+		const first = container.resolve('nullable');
+		const second = container.resolve('nullable');
+		expect(first).toBeNull();
+		expect(second).toBeNull();
+		expect(callCount).toBe(1);
+	});
+
+	test('undefined singleton — factory is called again due to cache check using !== undefined', () => {
+		let callCount = 0;
+		const container = createContainer().registerSingleton('undef', () => {
+			callCount++;
+			return undefined;
+		});
+
+		container.resolve('undef');
+		container.resolve('undef');
+
+		// The cache check uses `!== undefined`, so undefined values are not properly cached.
+		// This documents the current behavior: the factory is called on every resolve.
+		expect(callCount).toBeGreaterThan(1);
+	});
+});
+
+describe('tryResolve in factory', () => {
+	test('factory can use tryResolve for a registered token', () => {
+		const container = createContainer()
+			.registerSingleton(ServiceA, () => new ServiceA('injected'))
+			.registerSingleton(ServiceB, r => {
+				const a = r.tryResolve(ServiceA);
+				return new ServiceB(a ?? new ServiceA('fallback'));
+			});
+
+		const b = container.resolve(ServiceB);
+		expect(b.a.value).toBe('injected');
+	});
+
+	test('factory can use tryResolve for an unregistered token — returns undefined', () => {
+		const container = createContainer().registerSingleton(ServiceB, r => {
+			const a = r.tryResolve(Unregistered) as ServiceA | undefined;
+			return new ServiceB(a ?? new ServiceA('fallback'));
+		});
+
+		const b = container.resolve(ServiceB);
+		expect(b.a.value).toBe('fallback');
+	});
+});
+
+describe('async singleton (rejected Promise)', () => {
+	test('caches the rejected Promise — subsequent resolves return the same rejected Promise', async () => {
+		const container = createContainer().registerSingleton(AsyncService, async (): Promise<AsyncService> => {
+			throw new Error('init failed');
+		});
+
+		const first = container.resolve(AsyncService);
+		const second = container.resolve(AsyncService);
+
+		// The same rejected Promise object is cached and returned
+		expect(first).toBe(second);
+		expect(first).rejects.toThrow('init failed');
+	});
+});
+
+describe('registration override after resolve', () => {
+	test('override after resolve still returns the cached instance (stale cache)', () => {
+		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA('first'));
+
+		// Resolve caches the 'first' instance
+		const cached = container.resolve(ServiceA);
+		expect(cached.value).toBe('first');
+
+		// Override the registration
+		container.registerSingleton(ServiceA, () => new ServiceA('second'));
+
+		// Cached instance is still returned because the cache check happens before registration lookup
+		const result = container.resolve(ServiceA);
+		expect(result.value).toBe('first');
+		expect(result).toBe(cached);
+	});
+});
+
+describe('number token', () => {
+	test('works with number token for singleton', () => {
+		const container = createContainer().registerSingleton(0, () => 'zero');
+		expect(container.resolve(0)).toBe('zero');
+	});
+
+	test('works with number token for transient', () => {
+		const container = createContainer().registerTransient(1, () => Math.random());
+		const first = container.resolve(1);
+		const second = container.resolve(1);
+		expect(typeof first).toBe('number');
+		expect(first).not.toBe(second);
+	});
+});
+
+describe('mixed lifetime circular dependency', () => {
+	test('detects circular dependency across singleton and transient lifetimes', () => {
+		const container = createContainer()
+			.registerSingleton(
+				CircularA,
+				r => new CircularA((r as never as { resolve: (t: unknown) => CircularB }).resolve(CircularB)),
+			)
+			.registerTransient(
+				CircularB,
+				r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
+			);
+
+		expect(() => container.resolve(CircularA)).toThrow(ContainerError);
+		expect(() => container.resolve(CircularA)).toThrow('Circular dependency detected');
 	});
 });

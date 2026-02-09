@@ -216,3 +216,92 @@ describe('await using integration (container)', () => {
 		expect(instance.disposed).toBe(true);
 	});
 });
+
+describe('Container transient disposal', () => {
+	test('does not dispose transient instances', async () => {
+		const container = disposable(
+			createContainer()
+				.registerTransient(DisposableService, () => new DisposableService())
+				.registerSingleton(AsyncDisposableService, () => new AsyncDisposableService()),
+		);
+
+		// Resolve transient (not stored in ownInstances) and singleton (stored)
+		const transientInstance = container.resolve(DisposableService);
+		const singletonInstance = container.resolve(AsyncDisposableService);
+
+		await container[Symbol.asyncDispose]();
+
+		// Transient instances are NOT tracked and thus NOT disposed
+		expect(transientInstance.disposed).toBe(false);
+		// Singleton instances ARE disposed
+		expect(singletonInstance.disposed).toBe(true);
+	});
+});
+
+describe('Container [Symbol.asyncDispose] preference', () => {
+	test('prefers [Symbol.asyncDispose]() over [Symbol.dispose]() when both exist', async () => {
+		class BothDisposable {
+			public syncDisposed = false;
+			public asyncDisposed = false;
+
+			public [Symbol.dispose](): void {
+				this.syncDisposed = true;
+			}
+
+			public async [Symbol.asyncDispose](): Promise<void> {
+				this.asyncDisposed = true;
+			}
+		}
+
+		const container = disposable(createContainer().registerSingleton(BothDisposable, () => new BothDisposable()));
+		const instance = container.resolve(BothDisposable);
+
+		await container[Symbol.asyncDispose]();
+		expect(instance.asyncDisposed).toBe(true);
+		expect(instance.syncDisposed).toBe(false);
+	});
+});
+
+describe('disposable() double invocation', () => {
+	test('calling disposable() twice overwrites the dispose handler — both calls work', async () => {
+		const container = createContainer().registerSingleton(DisposableService, () => new DisposableService());
+
+		// First disposable() call
+		const first = disposable(container);
+		// Second disposable() call on the same object — configurable: true allows overwrite
+		const second = disposable(container);
+
+		// Both references point to the same underlying container
+		expect(first).toBe(second);
+
+		const instance = second.resolve(DisposableService);
+		await second[Symbol.asyncDispose]();
+		expect(instance.disposed).toBe(true);
+	});
+});
+
+describe('Container disposal effect on child scopes', () => {
+	test('container disposal clears singleton cache — scope loses cached singletons', async () => {
+		const container = createContainer()
+			.registerSingleton(ServiceA, () => new ServiceA())
+			.registerScoped(DisposableService, () => new DisposableService());
+
+		const scope = createScope(container);
+
+		// Resolve singleton through scope — cached in shared singletonInstances map
+		const singletonViaScope = scope.resolve(ServiceA);
+		expect(singletonViaScope).toBeInstanceOf(ServiceA);
+
+		// Dispose the container — clears ownInstances (which IS the instances/singletonInstances map)
+		const disposableContainer = disposable(container);
+		await disposableContainer[Symbol.asyncDispose]();
+
+		// Scope's singletonInstances map is the same reference, now cleared.
+		// Resolving the singleton again through scope will create a new instance.
+		// However, the scope itself is not marked as disposed, so it can still resolve.
+		// Note: the container IS marked as disposed, but the scope has its own disposed flag.
+		const newSingleton = scope.resolve(ServiceA);
+		expect(newSingleton).toBeInstanceOf(ServiceA);
+		expect(newSingleton).not.toBe(singletonViaScope);
+	});
+});

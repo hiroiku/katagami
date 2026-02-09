@@ -1,16 +1,17 @@
 import type { Container } from '../container';
+import type { DisposableContainer, DisposableScope } from '../disposable';
 import { ContainerError } from '../error';
 import { type ContainerInternals, INTERNALS } from '../internal';
 import type { AbstractConstructor, Lifetime, Registration, Resolver } from '../resolver';
 import { buildCircularPath, tokenToString } from '../resolver';
 
 /**
- * Create a new scope (child container) from a Container or an existing Scope.
+ * Create a new scope (child container) from a Container, Scope, or their disposable variants.
  *
  * The scope inherits all registrations from the source.
  * Singleton instances are shared with the parent, while scoped instances are local to the scope.
  *
- * @param source A Container or Scope to create a child scope from
+ * @param source A Container, Scope, DisposableContainer, or DisposableScope to create a child scope from
  * @returns A new Scope instance
  * @throws ContainerError if the source has been disposed
  */
@@ -33,6 +34,26 @@ export function createScope<
 	ScopedAsync extends AbstractConstructor,
 >(
 	source: Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>,
+): Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
+export function createScope<
+	T,
+	Sync extends AbstractConstructor,
+	Async extends AbstractConstructor,
+	ScopedT,
+	ScopedSync extends AbstractConstructor,
+	ScopedAsync extends AbstractConstructor,
+>(
+	source: DisposableContainer<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>,
+): Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
+export function createScope<
+	T,
+	Sync extends AbstractConstructor,
+	Async extends AbstractConstructor,
+	ScopedT,
+	ScopedSync extends AbstractConstructor,
+	ScopedAsync extends AbstractConstructor,
+>(
+	source: DisposableScope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>,
 ): Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
 export function createScope(source: { readonly [INTERNALS]: ContainerInternals }): Scope {
 	const internals = source[INTERNALS];

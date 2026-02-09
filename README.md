@@ -8,22 +8,24 @@ Lightweight TypeScript DI container with full type inference.
 [![license](https://img.shields.io/npm/l/katagami)](https://github.com/hiroiku/katagami/blob/master/LICENSE)
 [![bundle size](https://img.shields.io/bundlephobia/minzip/katagami)](https://bundlephobia.com/package/katagami)
 
-> The name comes from 型紙 _(katagami)_ — precision stencil paper used in traditional Japanese dyeing to transfer exact patterns onto fabric. Multiple stencils are layered to compose intricate designs, just as types accumulate through each method-chain call. A stencil needs only paper and a brush, no elaborate machinery — likewise, Katagami requires no decorators or metadata mechanisms and works with any build tool out of the box. And like stencils that work across different fabrics and techniques, Katagami adapts across TypeScript and JavaScript, class tokens and PropertyKey tokens — a hybrid approach to strict, composable DI.
+> The name comes from 型紙 _(katagami)_ — precision stencil paper used in traditional Japanese dyeing to transfer exact patterns onto fabric. Multiple stencils are layered to compose intricate designs, just as types accumulate through each method-chain call. Each stencil is a self-contained piece — chosen only for the current work, the rest left behind — just as subpath exports ensure only the code you use enters your bundle. The cut pattern determines exactly where dye passes and where it is blocked, much like Katagami's type system catches misuse at compile time, not at runtime. And a stencil needs only paper and a brush, no elaborate machinery — likewise, Katagami requires no decorators or metadata mechanisms and works with any build tool out of the box.
 
 ## Features
 
-| Feature                       | Description                                                                                  |
-| ----------------------------- | -------------------------------------------------------------------------------------------- |
-| Full type inference           | Types accumulate through method chaining; unregistered tokens are compile-time errors        |
-| Three lifetimes               | Singleton, Transient, and Scoped with child containers                                       |
-| Async factories               | Promise-returning factories are automatically tracked by the type system                     |
-| Circular dependency detection | Clear error messages with the full cycle path                                                |
-| Disposable support            | TC39 Explicit Resource Management (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`) |
-| Captive dependency prevention | Singleton/Transient factories cannot access scoped tokens; caught at compile time            |
-| Optional resolution           | `tryResolve` returns `undefined` for unregistered tokens instead of throwing                 |
-| Hybrid token strategy         | Class tokens for strict type safety, PropertyKey tokens for flexibility                      |
-| Interface type map            | Pass an interface to `createContainer<T>()` for order-independent registration               |
-| Zero dependencies             | No decorators, no reflect-metadata, no polyfills                                             |
+| Feature                       | Description                                                                                                |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Zero dependencies             | No decorators, no reflect-metadata, no polyfills — works with any bundler out of the box                   |
+| Full type inference           | Types accumulate through method chaining; unregistered tokens are compile-time errors                      |
+| Tree-shakeable                | Subpath exports (`katagami/scope`, `katagami/disposable`) and `sideEffects: false` for minimal bundle size |
+| Captive dependency prevention | Singleton/Transient factories cannot access scoped tokens; caught at compile time                          |
+| Hybrid token strategy         | Class tokens for strict type safety, PropertyKey tokens for flexibility                                    |
+| Interface type map            | Pass an interface to `createContainer<T>()` for order-independent registration                             |
+| Three lifetimes               | Singleton, Transient, and Scoped with child containers                                                     |
+| Disposable support            | TC39 Explicit Resource Management (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`)               |
+| Module composition            | Containers can be composed via `use()` to group and reuse registrations                                    |
+| Async factories               | Promise-returning factories are automatically tracked by the type system                                   |
+| Circular dependency detection | Clear error messages with the full cycle path                                                              |
+| Optional resolution           | `tryResolve` returns `undefined` for unregistered tokens instead of throwing                               |
 
 ## Install
 
@@ -65,6 +67,19 @@ Most TypeScript DI containers rely on decorators, reflect-metadata, or string-ba
 ### No decorators, no reflect-metadata
 
 Decorator-based DI requires `experimentalDecorators` and `emitDecoratorMetadata` compiler options. Modern build tools such as esbuild and Vite (default configuration) do not support `emitDecoratorMetadata`, and the TC39 standard decorators proposal does not include an equivalent for automatic type metadata emission. Katagami depends on none of these — it works with any build tool out of the box.
+
+### Tree-shakeable
+
+Katagami is split into subpath exports. Import only what you use — `katagami/scope` and `katagami/disposable` are completely eliminated from the bundle if not imported. Combined with `sideEffects: false`, bundlers can remove every unused byte.
+
+```ts
+// Core only — scope and disposable are not included in the bundle
+import { createContainer } from 'katagami';
+
+// Import only what you need
+import { createScope } from 'katagami/scope';
+import { disposable } from 'katagami/disposable';
+```
 
 ### Full type inference from class tokens
 
@@ -155,6 +170,53 @@ parentScope.resolve(RequestContext) === childScope.resolve(RequestContext); // f
 parentScope.resolve(DbPool) === childScope.resolve(DbPool); // true
 ```
 
+### Module Composition
+
+Group related registrations into a reusable module by creating a container with `createContainer()`, then apply it to another container with `use()`. Only registration entries are copied — singleton instance caches are not shared.
+
+```ts
+import { createContainer } from 'katagami';
+
+class AuthService {
+	authenticate() {
+		return true;
+	}
+}
+
+class TokenService {
+	issue() {
+		return 'token';
+	}
+}
+
+class UserService {
+	constructor(private auth: AuthService, private tokens: TokenService) {}
+}
+
+// Define a reusable module
+const authModule = createContainer()
+	.registerSingleton(AuthService, () => new AuthService())
+	.registerSingleton(TokenService, () => new TokenService());
+
+// Compose modules
+const container = createContainer()
+	.use(authModule)
+	.registerSingleton(UserService, r => new UserService(r.resolve(AuthService), r.resolve(TokenService)));
+```
+
+Modules can also compose other modules:
+
+```ts
+const infraModule = createContainer().registerSingleton(AuthService, () => new AuthService());
+
+const appModule = createContainer()
+	.use(infraModule)
+	.registerSingleton(UserService, r => new UserService(r.resolve(AuthService), r.resolve(TokenService)));
+
+// appModule includes both AuthService and UserService
+const container = createContainer().use(appModule);
+```
+
 ### Async Factories
 
 Factories that return a `Promise` are automatically tracked by the type system. When you `resolve` an async token, the return type is `Promise<V>` instead of `V`:
@@ -243,9 +305,7 @@ class Connection {
 }
 
 // Manual disposal
-const container = disposable(
-	createContainer().registerSingleton(Connection, () => new Connection()),
-);
+const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
 
 container.resolve(Connection);
 await container[Symbol.asyncDispose]();
@@ -270,6 +330,28 @@ const root = createContainer()
 ```
 
 Scope disposal only affects scoped instances. Singleton instances are owned by the root container and are disposed when the container itself is disposed.
+
+The `disposable()` wrapper also narrows the returned type so that registration methods (`registerSingleton`, `registerTransient`, `registerScoped`, `use`) are removed at the type level. This prevents accidental registration on a potentially-disposed container:
+
+```ts
+const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
+
+container.resolve(Connection); // OK
+container.registerSingleton(/* ... */); // Compile-time error
+```
+
+### Tree Shaking
+
+Katagami uses subpath exports to split functionality into independent entry points. If you only need the core container, `katagami/scope` and `katagami/disposable` are completely excluded from the bundle. The package declares `sideEffects: false`, so bundlers can safely eliminate any unused code.
+
+```ts
+// Core only — scope and disposable are not included in the bundle
+import { createContainer } from 'katagami';
+
+// Import only what you need
+import { createScope } from 'katagami/scope';
+import { disposable } from 'katagami/disposable';
+```
 
 ### Interface Type Map
 
@@ -400,23 +482,27 @@ const container = createContainer()
 
 Creates a new DI container. Pass an interface as `T` to define the type map for PropertyKey tokens. Pass `ScopedT` to define a separate type map for scoped PropertyKey tokens (order-independent, just like `T`).
 
-### `container.registerSingleton(token, factory)`
+### `Container.prototype.registerSingleton(token, factory)`
 
 Registers a factory as a singleton. The instance is created on the first `resolve` and cached thereafter. Returns the container for method chaining.
 
-### `container.registerTransient(token, factory)`
+### `Container.prototype.registerTransient(token, factory)`
 
 Registers a factory as transient. A new instance is created on every `resolve`. Returns the container for method chaining.
 
-### `container.registerScoped(token, factory)`
+### `Container.prototype.registerScoped(token, factory)`
 
 Registers a factory as scoped. Within a scope, the instance is created on the first `resolve` and cached for that scope. Each scope maintains its own cache. Scoped tokens cannot be resolved from the root container. Returns the container for method chaining.
 
-### `container.resolve(token)`
+### `Container.prototype.use(source)`
+
+Copies all registrations from `source` (another `Container`) into this container. Only factory and lifetime entries are copied — singleton instance caches are not shared. Returns the container for method chaining.
+
+### `Container.prototype.resolve(token)`
 
 Resolves and returns the instance for the given token. Throws `ContainerError` if the token is not registered or if a circular dependency is detected.
 
-### `container.tryResolve(token)` / `scope.tryResolve(token)`
+### `Container.prototype.tryResolve(token)`
 
 Attempts to resolve the instance for the given token. Returns `undefined` if the token is not registered, instead of throwing. Still throws `ContainerError` for circular dependencies or operations on disposed containers/scopes.
 
@@ -424,19 +510,27 @@ Attempts to resolve the instance for the given token. Returns `undefined` if the
 
 Creates a new `Scope` (child container) from a `Container` or an existing `Scope`. The scope inherits all registrations from the source. Singleton instances are shared with the parent, while scoped instances are local to the scope.
 
-### `Scope`
+### `class Scope`
 
-A scoped child container created by `createScope()`. Provides `resolve(token)` and `tryResolve(token)`.
+A scoped child container created by `createScope()`.
+
+### `Scope.prototype.resolve(token)`
+
+Resolves and returns the instance for the given token. Behaves the same as `Container.prototype.resolve`, but can also resolve scoped tokens.
+
+### `Scope.prototype.tryResolve(token)`
+
+Attempts to resolve the instance for the given token. Returns `undefined` if the token is not registered, instead of throwing. Still throws `ContainerError` for circular dependencies or operations on disposed scopes.
 
 ### `disposable(container)` — `katagami/disposable`
 
-Attaches `[Symbol.asyncDispose]` to a `Container` or `Scope`, enabling `await using` syntax. Disposes all owned instances in reverse creation order (LIFO). Calls `[Symbol.asyncDispose]()` or `[Symbol.dispose]()` on each instance that implements them. Idempotent — subsequent calls are no-ops. After disposal, `resolve()` and `createScope()` will throw `ContainerError`.
+Attaches `[Symbol.asyncDispose]` to a `Container` or `Scope`, enabling `await using` syntax. Disposes all owned instances in reverse creation order (LIFO). Calls `[Symbol.asyncDispose]()` or `[Symbol.dispose]()` on each instance that implements them. Idempotent — subsequent calls are no-ops. After disposal, `resolve()` and `createScope()` will throw `ContainerError`. The returned type is narrowed to `DisposableContainer` or `DisposableScope`, which only expose `resolve` and `tryResolve` — registration methods are excluded at the type level.
 
-### `ContainerError`
+### `class ContainerError`
 
 Error class thrown for container failures such as resolving an unregistered token, circular dependencies, or operations on a disposed container/scope.
 
-### `Resolver`
+### `type Resolver`
 
 Type export representing the resolver passed to factory callbacks. Useful when you need to type a function that accepts a resolver parameter.
 

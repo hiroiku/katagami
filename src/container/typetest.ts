@@ -9,6 +9,7 @@
  * Run with: tsc --noEmit
  */
 
+import { disposable } from '../disposable';
 import { createScope } from '../scope';
 import { createContainer } from '.';
 
@@ -350,3 +351,213 @@ createContainer()
 		const _optional: UnregisteredService | Promise<UnregisteredService> | undefined = r.tryResolve(UnregisteredService);
 		return {} as ServiceA;
 	});
+
+// ===========================================================================
+// 27. use merges class tokens from source container
+// ===========================================================================
+
+{
+	const module = createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA);
+	const container = createContainer().use(module);
+
+	// OK — class token from module is resolvable
+	const _a: ServiceA = container.resolve(ServiceA);
+}
+
+// ===========================================================================
+// 28. use merges PropertyKey tokens from source container
+// ===========================================================================
+
+{
+	const module = createContainer().registerSingleton('greeting', () => 'hello');
+	const container = createContainer().use(module);
+
+	// OK — PropertyKey token from module is resolvable
+	const _greeting: string = container.resolve('greeting');
+}
+
+// ===========================================================================
+// 29. Tokens from module are available in factory after use
+// ===========================================================================
+
+createContainer()
+	.use(createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA))
+	// OK — factory can resolve token from used module
+	.registerSingleton(ServiceB, r => ({ b: r.resolve(ServiceA).a }) as ServiceB);
+
+// ===========================================================================
+// 30. Unregistered tokens cannot be resolved after use
+// ===========================================================================
+
+{
+	const module = createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA);
+	const container = createContainer().use(module);
+
+	// @ts-expect-error — ServiceB was not registered in the module or the container
+	container.resolve(ServiceB);
+}
+
+// ===========================================================================
+// 31. Scoped tokens from module cannot be resolved from root container
+// ===========================================================================
+
+{
+	const module = createContainer().registerScoped(ScopedService, () => ({}) as ScopedService);
+	const container = createContainer().use(module);
+
+	// @ts-expect-error — scoped token from module cannot be resolved from root
+	container.resolve(ScopedService);
+}
+
+// ===========================================================================
+// 32. Scoped tokens from module CAN be resolved from a Scope
+// ===========================================================================
+
+{
+	const module = createContainer().registerScoped(ScopedService, () => ({}) as ScopedService);
+	const container = createContainer().use(module);
+	const scope = createScope(container);
+
+	// OK — scoped token from module is available in a Scope
+	const _s: ScopedService = scope.resolve(ScopedService);
+}
+
+// ===========================================================================
+// 33. Captive dependency prevention works with use — singleton cannot resolve scoped from module
+// ===========================================================================
+
+createContainer()
+	.use(createContainer().registerScoped(ScopedService, () => ({}) as ScopedService))
+	// @ts-expect-error — singleton factory cannot resolve scoped token from module
+	.registerSingleton(ServiceA, r => ({ a: r.resolve(ScopedService).s }) as ServiceA);
+
+// ===========================================================================
+// 34. Module composition preserves type information
+// ===========================================================================
+
+{
+	const innerModule = createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA);
+	const outerModule = createContainer()
+		.use(innerModule)
+		.registerSingleton(ServiceB, r => ({ b: r.resolve(ServiceA).a }) as ServiceB);
+
+	const container = createContainer().use(outerModule);
+
+	// OK — both tokens from composed modules are available
+	const _a: ServiceA = container.resolve(ServiceA);
+	const _b: ServiceB = container.resolve(ServiceB);
+}
+
+// ===========================================================================
+// 35. disposable() on Container hides registerSingleton
+// ===========================================================================
+
+{
+	const container = disposable(createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA));
+
+	// @ts-expect-error — registerSingleton is not available after disposable()
+	container.registerSingleton(ServiceB, () => ({}) as ServiceB);
+}
+
+// ===========================================================================
+// 36. disposable() on Container hides registerTransient
+// ===========================================================================
+
+{
+	const container = disposable(createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA));
+
+	// @ts-expect-error — registerTransient is not available after disposable()
+	container.registerTransient(ServiceB, () => ({}) as ServiceB);
+}
+
+// ===========================================================================
+// 37. disposable() on Container hides registerScoped
+// ===========================================================================
+
+{
+	const container = disposable(createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA));
+
+	// @ts-expect-error — registerScoped is not available after disposable()
+	container.registerScoped(ScopedService, () => ({}) as ScopedService);
+}
+
+// ===========================================================================
+// 38. disposable() on Container hides use
+// ===========================================================================
+
+{
+	const module = createContainer().registerSingleton(ServiceB, () => ({}) as ServiceB);
+	const container = disposable(createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA));
+
+	// @ts-expect-error — use is not available after disposable()
+	container.use(module);
+}
+
+// ===========================================================================
+// 39. disposable() on Container allows resolve
+// ===========================================================================
+
+{
+	const container = disposable(createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA));
+
+	// OK — resolve is available after disposable()
+	const _a: ServiceA = container.resolve(ServiceA);
+}
+
+// ===========================================================================
+// 40. disposable() on Container allows tryResolve
+// ===========================================================================
+
+{
+	const container = disposable(createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA));
+
+	// OK — tryResolve is available after disposable()
+	const _a: ServiceA | undefined = container.tryResolve(ServiceA);
+}
+
+// ===========================================================================
+// 41. disposable() on Scope allows resolve
+// ===========================================================================
+
+{
+	const root = createContainer().registerScoped(ScopedService, () => ({}) as ScopedService);
+	const scope = disposable(createScope(root));
+
+	// OK — resolve is available on disposable scope
+	const _s: ScopedService = scope.resolve(ScopedService);
+}
+
+// ===========================================================================
+// 42. createScope works with DisposableContainer
+// ===========================================================================
+
+{
+	const container = disposable(
+		createContainer()
+			.registerSingleton(ServiceA, () => ({}) as ServiceA)
+			.registerScoped(ScopedService, () => ({}) as ScopedService),
+	);
+
+	const scope = createScope(container);
+
+	// OK — scope created from disposable container can resolve both
+	const _a: ServiceA = scope.resolve(ServiceA);
+	const _s: ScopedService = scope.resolve(ScopedService);
+}
+
+// ===========================================================================
+// 43. createScope works with DisposableScope
+// ===========================================================================
+
+{
+	const root = createContainer()
+		.registerSingleton(ServiceA, () => ({}) as ServiceA)
+		.registerScoped(ScopedService, () => ({}) as ScopedService);
+
+	const parentScope = disposable(createScope(root));
+	const childScope = createScope(parentScope);
+
+	// OK — child scope from disposable scope can resolve both
+	const _a: ServiceA = childScope.resolve(ServiceA);
+	const _s: ScopedService = childScope.resolve(ScopedService);
+}

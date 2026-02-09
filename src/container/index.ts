@@ -175,6 +175,40 @@ export class Container<
 	}
 
 	/**
+	 * Apply all registrations from another container (module) to this container.
+	 *
+	 * Copies only registration entries (factory + lifetime). Singleton instance caches
+	 * are not shared — each container manages its own.
+	 *
+	 * @param source A container whose registrations will be copied into this container
+	 * @returns The container for method chaining
+	 */
+	public use<
+		MT,
+		MSync extends AbstractConstructor,
+		MAsync extends AbstractConstructor,
+		MScopedT,
+		MScopedSync extends AbstractConstructor,
+		MScopedAsync extends AbstractConstructor,
+	>(
+		source: Container<MT, MSync, MAsync, MScopedT, MScopedSync, MScopedAsync>,
+	): Container<
+		T & MT,
+		Sync | MSync,
+		Async | MAsync,
+		ScopedT & MScopedT,
+		ScopedSync | MScopedSync,
+		ScopedAsync | MScopedAsync
+	>;
+	public use(source: Container): Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync> {
+		for (const [token, registration] of source[INTERNALS].registrations) {
+			this.registrations.set(token, registration);
+		}
+
+		return this;
+	}
+
+	/**
 	 * Resolve an instance for the given token.
 	 *
 	 * For singleton registrations, creates the instance on the first call and caches it.

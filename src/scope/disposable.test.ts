@@ -295,3 +295,63 @@ describe('await using integration (scope)', () => {
 		expect(instance.disposed).toBe(true);
 	});
 });
+
+describe('Scope transient disposal', () => {
+	test('does not dispose transient instances resolved in scope', async () => {
+		const container = createContainer()
+			.registerTransient(DisposableService, () => new DisposableService())
+			.registerScoped(AsyncDisposableService, () => new AsyncDisposableService());
+
+		const scope = disposable(createScope(container));
+
+		// Resolve transient (not stored in ownInstances) and scoped (stored)
+		const transientInstance = scope.resolve(DisposableService);
+		const scopedInstance = scope.resolve(AsyncDisposableService);
+
+		await scope[Symbol.asyncDispose]();
+
+		// Transient instances are NOT tracked and thus NOT disposed
+		expect(transientInstance.disposed).toBe(false);
+		// Scoped instances ARE disposed
+		expect(scopedInstance.disposed).toBe(true);
+	});
+});
+
+describe('parent scope disposal effect on child scope', () => {
+	test('child scope can still resolve its own scoped instances after parent disposal', async () => {
+		const container = createContainer()
+			.registerSingleton(ServiceA, () => new ServiceA())
+			.registerScoped(DisposableService, () => new DisposableService());
+
+		const parentScope = disposable(createScope(container));
+		const childScope = createScope(parentScope);
+
+		// Resolve in child scope before parent disposal
+		const childScoped = childScope.resolve(DisposableService);
+		expect(childScoped).toBeInstanceOf(DisposableService);
+
+		// Dispose parent scope — clears parent's ownInstances (scopedInstances)
+		await parentScope[Symbol.asyncDispose]();
+
+		// Child scope has its own scopedInstances, so previously resolved scoped instances are still available
+		const childScopedAgain = childScope.resolve(DisposableService);
+		expect(childScopedAgain).toBe(childScoped);
+	});
+
+	test('child scope shares singletonInstances with parent — singleton resolved in child is visible to container', () => {
+		const container = createContainer()
+			.registerSingleton(ServiceA, () => new ServiceA())
+			.registerScoped(DisposableService, () => new DisposableService());
+
+		const parentScope = createScope(container);
+		const childScope = createScope(parentScope);
+
+		// Resolve singleton through child — goes into shared singletonInstances
+		const childSingleton = childScope.resolve(ServiceA);
+		const parentSingleton = parentScope.resolve(ServiceA);
+		const rootSingleton = container.resolve(ServiceA);
+
+		expect(childSingleton).toBe(parentSingleton);
+		expect(childSingleton).toBe(rootSingleton);
+	});
+});

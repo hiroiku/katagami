@@ -8,22 +8,24 @@
 [![license](https://img.shields.io/npm/l/katagami)](https://github.com/hiroiku/katagami/blob/master/LICENSE)
 [![bundle size](https://img.shields.io/bundlephobia/minzip/katagami)](https://bundlephobia.com/package/katagami)
 
-> 名称源自日语「型紙」_(katagami)_——一种用于传统日本染色工艺的精密型版纸，将精确的图案转印到织物上。多张型版叠加组合出复杂的纹样，正如类型随着每次方法链调用而逐步积累。型版只需纸和刷子，无需精密的机械装置——同样地，Katagami 不依赖装饰器或元数据机制，开箱即用于任何构建工具。而就像型版能适应不同的织物与技法，Katagami 也能跨越 TypeScript 与 JavaScript、类令牌与 PropertyKey 令牌——以混合方式实现严格、可组合的 DI。
+> 名称源自日语「型紙」_(katagami)_——一种用于传统日本染色工艺的精密型版纸，将精确的图案转印到织物上。多张型版叠加组合出复杂的纹样，正如类型随着每次方法链调用而逐步积累。每张型版都是独立的——只取当前工作所需的那张，其余留在架上——正如子路径导出确保只有你使用的代码进入包中。型版的镂空精确地决定了染料通过和阻挡的位置，正如 Katagami 的类型系统在编译时而非运行时捕获误用。而型版只需纸和刷子，无需精密的机械装置——同样地，Katagami 不依赖装饰器或元数据机制，开箱即用于任何构建工具。
 
 ## 特性
 
-| 特性            | 说明                                                                          |
-| --------------- | ----------------------------------------------------------------------------- |
-| 完整的类型推断  | 类型随方法链积累；解析未注册的令牌会产生编译时错误                            |
-| 三种生命周期    | Singleton、Transient 和 Scoped（支持子容器）                                  |
-| 异步工厂        | 返回 Promise 的工厂会被类型系统自动追踪                                       |
-| 循环依赖检测    | 包含完整循环路径的清晰错误消息                                                |
-| Disposable 支持 | TC39 显式资源管理（`Symbol.dispose` / `Symbol.asyncDispose` / `await using`） |
-| 捕获依赖防护    | Singleton/Transient 工厂无法访问 Scoped 令牌；在编译时捕获                    |
-| 可选解析        | `tryResolve` 对未注册令牌返回 `undefined` 而非抛出异常                        |
-| 混合令牌策略    | 类令牌提供严格的类型安全，PropertyKey 令牌提供灵活性                          |
-| 接口类型映射    | 向 `createContainer<T>()` 传入接口，实现与注册顺序无关的注册                  |
-| 零依赖          | 无需装饰器、无需 reflect-metadata、无需 polyfill                              |
+| 特性            | 说明                                                                                          |
+| --------------- | --------------------------------------------------------------------------------------------- |
+| 零依赖          | 无需装饰器、无需 reflect-metadata、无需 polyfill — 适用于任何构建工具，开箱即用               |
+| 完整的类型推断  | 类型随方法链积累；解析未注册的令牌会产生编译时错误                                            |
+| Tree Shaking    | 子路径导出（`katagami/scope`、`katagami/disposable`）配合 `sideEffects: false` 实现最小包体积 |
+| 捕获依赖防护    | Singleton/Transient 工厂无法访问 Scoped 令牌；在编译时捕获                                    |
+| 混合令牌策略    | 类令牌提供严格的类型安全，PropertyKey 令牌提供灵活性                                          |
+| 接口类型映射    | 向 `createContainer<T>()` 传入接口，实现与注册顺序无关的注册                                  |
+| 三种生命周期    | Singleton、Transient 和 Scoped（支持子容器）                                                  |
+| Disposable 支持 | TC39 显式资源管理（`Symbol.dispose` / `Symbol.asyncDispose` / `await using`）                 |
+| 模块组合        | 通过 `use()` 组合容器，将注册分组并重复使用                                                   |
+| 异步工厂        | 返回 Promise 的工厂会被类型系统自动追踪                                                       |
+| 循环依赖检测    | 包含完整循环路径的清晰错误消息                                                                |
+| 可选解析        | `tryResolve` 对未注册令牌返回 `undefined` 而非抛出异常                                        |
 
 ## 安装
 
@@ -65,6 +67,19 @@ userService.greet('world');
 ### 无需装饰器，无需 reflect-metadata
 
 基于装饰器的 DI 需要 `experimentalDecorators` 和 `emitDecoratorMetadata` 编译器选项。esbuild 和 Vite（默认配置）等现代构建工具不支持 `emitDecoratorMetadata`，且 TC39 标准装饰器提案也不包含自动类型元数据发射的等效功能。Katagami 不依赖这些——它可以开箱即用于任何构建工具。
+
+### Tree Shaking
+
+Katagami 通过子路径导出拆分功能。只需导入你使用的部分——如果不导入 `katagami/scope` 和 `katagami/disposable`，它们将从包中完全移除。配合 `sideEffects: false`，构建工具可以移除每一个未使用的字节。
+
+```ts
+// 仅核心 — scope 和 disposable 不会包含在包中
+import { createContainer } from 'katagami';
+
+// 按需导入
+import { createScope } from 'katagami/scope';
+import { disposable } from 'katagami/disposable';
+```
 
 ### 基于类令牌的完整类型推断
 
@@ -153,6 +168,53 @@ parentScope.resolve(RequestContext) === childScope.resolve(RequestContext); // f
 
 // Singleton 仍然共享
 parentScope.resolve(DbPool) === childScope.resolve(DbPool); // true
+```
+
+### 模块组合
+
+将相关的注册以 `createContainer()` 分组为模块，并通过 `use()` 应用到其他容器。仅复制注册条目（工厂和生命周期），不共享单例实例缓存。
+
+```ts
+import { createContainer } from 'katagami';
+
+class AuthService {
+	authenticate() {
+		return true;
+	}
+}
+
+class TokenService {
+	issue() {
+		return 'token';
+	}
+}
+
+class UserService {
+	constructor(private auth: AuthService, private tokens: TokenService) {}
+}
+
+// 定义可重复使用的模块
+const authModule = createContainer()
+	.registerSingleton(AuthService, () => new AuthService())
+	.registerSingleton(TokenService, () => new TokenService());
+
+// 组合模块
+const container = createContainer()
+	.use(authModule)
+	.registerSingleton(UserService, r => new UserService(r.resolve(AuthService), r.resolve(TokenService)));
+```
+
+模块也可以组合其他模块：
+
+```ts
+const infraModule = createContainer().registerSingleton(AuthService, () => new AuthService());
+
+const appModule = createContainer()
+	.use(infraModule)
+	.registerSingleton(UserService, r => new UserService(r.resolve(AuthService), r.resolve(TokenService)));
+
+// appModule 同时包含 AuthService 和 UserService
+const container = createContainer().use(appModule);
 ```
 
 ### 异步工厂
@@ -268,6 +330,28 @@ const root = createContainer()
 ```
 
 作用域销毁仅影响 Scoped 实例。Singleton 实例归根容器所有，在容器本身销毁时才会被销毁。
+
+`disposable()` 包装器也会缩窄返回类型，在类型层面移除注册方法（`registerSingleton`、`registerTransient`、`registerScoped`、`use`）。这可以防止对可能已销毁的容器进行意外注册：
+
+```ts
+const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
+
+container.resolve(Connection); // OK
+container.registerSingleton(/* ... */); // 编译时错误
+```
+
+### Tree Shaking
+
+Katagami 使用子路径导出将功能拆分为独立的入口点。如果你只需要核心容器，`katagami/scope` 和 `katagami/disposable` 将从包中完全排除。包声明了 `sideEffects: false`，因此构建工具可以安全地移除任何未使用的代码。
+
+```ts
+// 仅核心 — scope 和 disposable 不会包含在包中
+import { createContainer } from 'katagami';
+
+// 按需导入
+import { createScope } from 'katagami/scope';
+import { disposable } from 'katagami/disposable';
+```
 
 ### 接口类型映射
 
@@ -398,23 +482,27 @@ const container = createContainer()
 
 创建新的 DI 容器。传入接口作为 `T` 以定义 PropertyKey 令牌的类型映射。传入 `ScopedT` 以定义 Scoped PropertyKey 令牌的独立类型映射（与 `T` 一样与注册顺序无关）。
 
-### `container.registerSingleton(token, factory)`
+### `Container.prototype.registerSingleton(token, factory)`
 
 将工厂注册为 Singleton。实例在首次 `resolve` 时创建并缓存。返回容器以支持方法链。
 
-### `container.registerTransient(token, factory)`
+### `Container.prototype.registerTransient(token, factory)`
 
 将工厂注册为 Transient。每次 `resolve` 都会创建新实例。返回容器以支持方法链。
 
-### `container.registerScoped(token, factory)`
+### `Container.prototype.registerScoped(token, factory)`
 
 将工厂注册为 Scoped。在作用域内，实例在首次 `resolve` 时创建并在该作用域内缓存。每个作用域维护自己的缓存。Scoped 令牌无法从根容器解析。返回容器以支持方法链。
 
-### `container.resolve(token)`
+### `Container.prototype.use(source)`
+
+将 `source`（另一个 `Container`）的所有注册复制到此容器中。仅复制工厂和生命周期条目，不共享单例实例缓存。返回容器以支持方法链。
+
+### `Container.prototype.resolve(token)`
 
 解析并返回给定令牌的实例。如果令牌未注册或检测到循环依赖，则抛出 `ContainerError`。
 
-### `container.tryResolve(token)` / `scope.tryResolve(token)`
+### `Container.prototype.tryResolve(token)`
 
 尝试解析给定令牌的实例。如果令牌未注册，返回 `undefined` 而不是抛出异常。对于循环依赖或已销毁容器/作用域的操作仍会抛出 `ContainerError`。
 
@@ -422,19 +510,27 @@ const container = createContainer()
 
 从 `Container` 或现有的 `Scope` 创建新的 `Scope`（子容器）。
 
-### `Scope`
+### `class Scope`
 
-由 `createScope()` 创建的作用域子容器。提供 `resolve(token)` 和 `tryResolve(token)`。
+由 `createScope()` 创建的作用域子容器。
+
+### `Scope.prototype.resolve(token)`
+
+解析并返回给定令牌的实例。与 `Container.prototype.resolve` 行为相同，但还可以解析 Scoped 令牌。
+
+### `Scope.prototype.tryResolve(token)`
+
+尝试解析给定令牌的实例。如果令牌未注册，返回 `undefined` 而不是抛出异常。对于循环依赖或已销毁作用域的操作仍会抛出 `ContainerError`。
 
 ### `disposable(container)` — `katagami/disposable`
 
-为 `Container` 或 `Scope` 附加 `[Symbol.asyncDispose]`，启用 `await using` 语法。按创建的逆序（LIFO）销毁所有托管实例。调用每个实例的 `[Symbol.asyncDispose]()` 或 `[Symbol.dispose]()`。幂等——后续调用为空操作。销毁后，`resolve()` 将抛出 `ContainerError`。
+为 `Container` 或 `Scope` 附加 `[Symbol.asyncDispose]`，启用 `await using` 语法。按创建的逆序（LIFO）销毁所有托管实例。调用每个实例的 `[Symbol.asyncDispose]()` 或 `[Symbol.dispose]()`。幂等——后续调用为空操作。销毁后，`resolve()` 将抛出 `ContainerError`。返回类型被缩窄为 `DisposableContainer` 或 `DisposableScope`，仅公开 `resolve` 和 `tryResolve` — 注册方法在类型层面被移除。
 
-### `ContainerError`
+### `class ContainerError`
 
 用于容器故障的错误类，例如解析未注册的令牌、循环依赖或对已销毁容器/作用域的操作。
 
-### `Resolver`
+### `type Resolver`
 
 表示传递给工厂回调的解析器的类型导出。当你需要为接受解析器参数的函数添加类型时很有用。
 

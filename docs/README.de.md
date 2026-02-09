@@ -8,22 +8,24 @@ Leichtgewichtiger TypeScript-DI-Container mit vollständiger Typinferenz.
 [![license](https://img.shields.io/npm/l/katagami)](https://github.com/hiroiku/katagami/blob/master/LICENSE)
 [![bundle size](https://img.shields.io/bundlephobia/minzip/katagami)](https://bundlephobia.com/package/katagami)
 
-> Der Name stammt von 型紙 _(katagami)_ — präzise Schablonenpapiere, die in der traditionellen japanischen Färbetechnik verwendet werden, um exakte Muster auf Stoff zu übertragen. Mehrere Schablonen werden übereinandergelegt, um kunstvolle Designs zu komponieren, genau wie sich Typen mit jedem Methodenkettenaufruf ansammeln. Eine Schablone benötigt nur Papier und einen Pinsel, keine aufwendige Maschinerie — ebenso benötigt Katagami keine Decorators oder Metadaten-Mechanismen und funktioniert mit jedem Build-Tool direkt einsatzbereit. Und wie Schablonen, die mit verschiedenen Stoffen und Techniken funktionieren, passt sich Katagami an TypeScript und JavaScript, Klassen-Token und PropertyKey-Token an — ein hybrider Ansatz für strikte, komponierbare DI.
+> Der Name stammt von 型紙 _(katagami)_ — präzise Schablonenpapiere, die in der traditionellen japanischen Färbetechnik verwendet werden, um exakte Muster auf Stoff zu übertragen. Mehrere Schablonen werden übereinandergelegt, um kunstvolle Designs zu komponieren, genau wie sich Typen mit jedem Methodenkettenaufruf ansammeln. Jede Schablone ist ein eigenständiges Stück — nur die für die aktuelle Arbeit benötigte wird ausgewählt, der Rest bleibt liegen — genauso wie Subpath-Exports sicherstellen, dass nur der Code, den Sie verwenden, in Ihr Bundle gelangt. Das ausgeschnittene Muster bestimmt genau, wo Farbe durchdringt und wo sie blockiert wird, ähnlich wie Katagamis Typsystem Fehler zur Kompilierzeit erkennt, nicht zur Laufzeit. Und eine Schablone benötigt nur Papier und einen Pinsel, keine aufwendige Maschinerie — ebenso benötigt Katagami keine Decorators oder Metadaten-Mechanismen und funktioniert mit jedem Build-Tool direkt einsatzbereit.
 
 ## Funktionen
 
-| Funktion                               | Beschreibung                                                                                            |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Vollständige Typinferenz               | Typen akkumulieren sich durch Methodenverkettung; nicht registrierte Token erzeugen Kompilierzeitfehler |
-| Drei Lebenszyklen                      | Singleton, Transient und Scoped mit Kind-Containern                                                     |
-| Asynchrone Factories                   | Promise-zurückgebende Factories werden automatisch vom Typsystem verfolgt                               |
-| Erkennung zirkulärer Abhängigkeiten    | Klare Fehlermeldungen mit dem vollständigen Zykluspfad                                                  |
-| Disposable-Unterstützung               | TC39 Explicit Resource Management (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`)            |
-| Verhinderung gefangener Abhängigkeiten | Singleton-/Transient-Factories können nicht auf Scoped-Token zugreifen; wird zur Kompilierzeit erkannt  |
-| Optionale Auflösung                    | `tryResolve` gibt `undefined` für nicht registrierte Token zurück statt zu werfen                       |
-| Hybride Token-Strategie                | Klassen-Token für strikte Typsicherheit, PropertyKey-Token für Flexibilität                             |
-| Interface-Typ-Map                      | Übergeben Sie ein Interface an `createContainer<T>()` für reihenfolgeunabhängige Registrierung          |
-| Null Abhängigkeiten                    | Keine Decorators, kein reflect-metadata, keine Polyfills                                                |
+| Funktion                               | Beschreibung                                                                                                   |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Null Abhängigkeiten                    | Keine Decorators, kein reflect-metadata, keine Polyfills — funktioniert mit jedem Bundler direkt einsatzbereit |
+| Vollständige Typinferenz               | Typen akkumulieren sich durch Methodenverkettung; nicht registrierte Token erzeugen Kompilierzeitfehler        |
+| Tree-Shaking-fähig                     | Subpath-Exports (`katagami/scope`, `katagami/disposable`) und `sideEffects: false` für minimale Bundle-Größe   |
+| Verhinderung gefangener Abhängigkeiten | Singleton-/Transient-Factories können nicht auf Scoped-Token zugreifen; wird zur Kompilierzeit erkannt         |
+| Hybride Token-Strategie                | Klassen-Token für strikte Typsicherheit, PropertyKey-Token für Flexibilität                                    |
+| Interface-Typ-Map                      | Übergeben Sie ein Interface an `createContainer<T>()` für reihenfolgeunabhängige Registrierung                 |
+| Drei Lebenszyklen                      | Singleton, Transient und Scoped mit Kind-Containern                                                            |
+| Disposable-Unterstützung               | TC39 Explicit Resource Management (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`)                   |
+| Modulkomposition                       | Container können mit `use()` komponiert werden, um Registrierungen zu gruppieren und wiederzuverwenden         |
+| Asynchrone Factories                   | Promise-zurückgebende Factories werden automatisch vom Typsystem verfolgt                                      |
+| Erkennung zirkulärer Abhängigkeiten    | Klare Fehlermeldungen mit dem vollständigen Zykluspfad                                                         |
+| Optionale Auflösung                    | `tryResolve` gibt `undefined` für nicht registrierte Token zurück statt zu werfen                              |
 
 ## Installation
 
@@ -65,6 +67,19 @@ Die meisten TypeScript-DI-Container basieren auf Decorators, reflect-metadata od
 ### Keine Decorators, kein reflect-metadata
 
 Decorator-basierte DI erfordert die Compiler-Optionen `experimentalDecorators` und `emitDecoratorMetadata`. Moderne Build-Tools wie esbuild und Vite (Standardkonfiguration) unterstützen `emitDecoratorMetadata` nicht, und der TC39-Standarddecorators-Vorschlag enthält kein Äquivalent für die automatische Typ-Metadaten-Emission. Katagami ist von nichts davon abhängig — es funktioniert mit jedem Build-Tool direkt einsatzbereit.
+
+### Tree-Shaking-fähig
+
+Katagami ist in Subpath-Exports aufgeteilt. Importieren Sie nur, was Sie brauchen — `katagami/scope` und `katagami/disposable` werden vollständig aus dem Bundle eliminiert, wenn sie nicht importiert werden. In Kombination mit `sideEffects: false` können Bundler jedes ungenutzte Byte entfernen.
+
+```ts
+// Nur der Kern — scope und disposable sind nicht im Bundle enthalten
+import { createContainer } from 'katagami';
+
+// Importieren Sie nur, was Sie brauchen
+import { createScope } from 'katagami/scope';
+import { disposable } from 'katagami/disposable';
+```
 
 ### Vollständige Typinferenz durch Klassen-Token
 
@@ -153,6 +168,53 @@ parentScope.resolve(RequestContext) === childScope.resolve(RequestContext); // f
 
 // Singletons werden weiterhin geteilt
 parentScope.resolve(DbPool) === childScope.resolve(DbPool); // true
+```
+
+### Modulkomposition
+
+Gruppieren Sie zusammengehörige Registrierungen in einem wiederverwendbaren Modul, indem Sie einen Container mit `createContainer()` erstellen, und wenden Sie ihn mit `use()` auf einen anderen Container an. Es werden nur Registrierungseinträge (Factory und Lebenszyklus) kopiert — Singleton-Instanz-Caches werden nicht geteilt.
+
+```ts
+import { createContainer } from 'katagami';
+
+class AuthService {
+	authenticate() {
+		return true;
+	}
+}
+
+class TokenService {
+	issue() {
+		return 'token';
+	}
+}
+
+class UserService {
+	constructor(private auth: AuthService, private tokens: TokenService) {}
+}
+
+// Ein wiederverwendbares Modul definieren
+const authModule = createContainer()
+	.registerSingleton(AuthService, () => new AuthService())
+	.registerSingleton(TokenService, () => new TokenService());
+
+// Module komponieren
+const container = createContainer()
+	.use(authModule)
+	.registerSingleton(UserService, r => new UserService(r.resolve(AuthService), r.resolve(TokenService)));
+```
+
+Module können auch andere Module komponieren:
+
+```ts
+const infraModule = createContainer().registerSingleton(AuthService, () => new AuthService());
+
+const appModule = createContainer()
+	.use(infraModule)
+	.registerSingleton(UserService, r => new UserService(r.resolve(AuthService), r.resolve(TokenService)));
+
+// appModule enthält sowohl AuthService als auch UserService
+const container = createContainer().use(appModule);
 ```
 
 ### Asynchrone Factories
@@ -268,6 +330,28 @@ const root = createContainer()
 ```
 
 Die Scope-Freigabe betrifft nur Scoped-Instanzen. Singleton-Instanzen gehören dem Root-Container und werden freigegeben, wenn der Container selbst freigegeben wird.
+
+Der `disposable()`-Wrapper verengt auch den Rückgabetyp, sodass Registrierungsmethoden (`registerSingleton`, `registerTransient`, `registerScoped`, `use`) auf Typebene entfernt werden. Dies verhindert versehentliche Registrierungen an einem möglicherweise entsorgten Container:
+
+```ts
+const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
+
+container.resolve(Connection); // OK
+container.registerSingleton(/* ... */); // Kompilierungsfehler
+```
+
+### Tree Shaking
+
+Katagami verwendet Subpath-Exports, um Funktionalität in unabhängige Einstiegspunkte aufzuteilen. Wenn Sie nur den Kern-Container benötigen, werden `katagami/scope` und `katagami/disposable` vollständig aus dem Bundle ausgeschlossen. Das Paket deklariert `sideEffects: false`, sodass Bundler ungenutzten Code sicher entfernen können.
+
+```ts
+// Nur der Kern — scope und disposable sind nicht im Bundle enthalten
+import { createContainer } from 'katagami';
+
+// Importieren Sie nur, was Sie brauchen
+import { createScope } from 'katagami/scope';
+import { disposable } from 'katagami/disposable';
+```
 
 ### Interface-Typ-Map
 
@@ -398,23 +482,27 @@ const container = createContainer()
 
 Erstellt einen neuen DI-Container. Übergeben Sie ein Interface als `T`, um die Typ-Map für PropertyKey-Token zu definieren. Übergeben Sie `ScopedT`, um eine separate Typ-Map für Scoped-PropertyKey-Token zu definieren (reihenfolgeunabhängig, genau wie `T`).
 
-### `container.registerSingleton(token, factory)`
+### `Container.prototype.registerSingleton(token, factory)`
 
 Registriert eine Factory als Singleton. Die Instanz wird beim ersten `resolve` erstellt und danach gecacht. Gibt den Container für Methodenverkettung zurück.
 
-### `container.registerTransient(token, factory)`
+### `Container.prototype.registerTransient(token, factory)`
 
 Registriert eine Factory als Transient. Bei jedem `resolve` wird eine neue Instanz erstellt. Gibt den Container für Methodenverkettung zurück.
 
-### `container.registerScoped(token, factory)`
+### `Container.prototype.registerScoped(token, factory)`
 
 Registriert eine Factory als Scoped. Innerhalb eines Scopes wird die Instanz beim ersten `resolve` erstellt und für diesen Scope gecacht. Jeder Scope pflegt seinen eigenen Cache. Scoped-Token können nicht vom Root-Container aufgelöst werden. Gibt den Container für Methodenverkettung zurück.
 
-### `container.resolve(token)`
+### `Container.prototype.use(source)`
+
+Kopiert alle Registrierungen von `source` (einem anderen `Container`) in diesen Container. Es werden nur Factory- und Lebenszyklus-Einträge kopiert — Singleton-Instanz-Caches werden nicht geteilt. Gibt den Container für Method-Chaining zurück.
+
+### `Container.prototype.resolve(token)`
 
 Löst die Instanz für das gegebene Token auf und gibt sie zurück. Wirft `ContainerError`, wenn das Token nicht registriert ist oder eine zirkuläre Abhängigkeit erkannt wird.
 
-### `container.tryResolve(token)` / `scope.tryResolve(token)`
+### `Container.prototype.tryResolve(token)`
 
 Versucht, die Instanz für das gegebene Token aufzulösen. Gibt `undefined` zurück, wenn das Token nicht registriert ist, anstatt zu werfen. Wirft immer noch `ContainerError` bei zirkulären Abhängigkeiten oder Operationen auf freigegebenen Containern/Scopes.
 
@@ -422,19 +510,27 @@ Versucht, die Instanz für das gegebene Token aufzulösen. Gibt `undefined` zur�
 
 Erstellt einen neuen `Scope` (Kind-Container) aus einem `Container` oder einem bestehenden `Scope`.
 
-### `Scope`
+### `class Scope`
 
-Ein Scoped-Kind-Container, erstellt durch `createScope()`. Bietet `resolve(token)` und `tryResolve(token)`.
+Ein Scoped-Kind-Container, erstellt durch `createScope()`.
+
+### `Scope.prototype.resolve(token)`
+
+Löst die Instanz für das gegebene Token auf und gibt sie zurück. Verhält sich wie `Container.prototype.resolve`, kann aber auch Scoped-Token auflösen.
+
+### `Scope.prototype.tryResolve(token)`
+
+Versucht, die Instanz für das gegebene Token aufzulösen. Gibt `undefined` zurück, wenn das Token nicht registriert ist, anstatt zu werfen. Wirft immer noch `ContainerError` bei zirkulären Abhängigkeiten oder Operationen auf freigegebenen Scopes.
 
 ### `disposable(container)` — `katagami/disposable`
 
-Fügt `[Symbol.asyncDispose]` einem `Container` oder `Scope` hinzu und ermöglicht die `await using`-Syntax. Gibt alle verwalteten Instanzen in umgekehrter Erstellungsreihenfolge (LIFO) frei. Ruft `[Symbol.asyncDispose]()` oder `[Symbol.dispose]()` für jede Instanz auf, die diese implementiert. Idempotent — nachfolgende Aufrufe sind No-Ops. Nach der Freigabe wirft `resolve()` einen `ContainerError`.
+Fügt `[Symbol.asyncDispose]` einem `Container` oder `Scope` hinzu und ermöglicht die `await using`-Syntax. Gibt alle verwalteten Instanzen in umgekehrter Erstellungsreihenfolge (LIFO) frei. Ruft `[Symbol.asyncDispose]()` oder `[Symbol.dispose]()` für jede Instanz auf, die diese implementiert. Idempotent — nachfolgende Aufrufe sind No-Ops. Nach der Freigabe wirft `resolve()` einen `ContainerError`. Der Rückgabetyp wird auf `DisposableContainer` oder `DisposableScope` verengt, die nur `resolve` und `tryResolve` exponieren — Registrierungsmethoden werden auf Typebene entfernt.
 
-### `ContainerError`
+### `class ContainerError`
 
 Fehlerklasse, die bei Container-Fehlern geworfen wird, wie z. B. das Auflösen eines nicht registrierten Tokens, zirkuläre Abhängigkeiten oder Operationen auf einem freigegebenen Container/Scope.
 
-### `Resolver`
+### `type Resolver`
 
 Typexport, der den an Factory-Callbacks übergebenen Resolver repräsentiert. Nützlich, wenn Sie eine Funktion typisieren müssen, die einen Resolver-Parameter akzeptiert.
 

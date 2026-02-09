@@ -238,6 +238,22 @@ describe('scoped + circular dependency detection', () => {
 		const scope = createScope(container);
 		expect(() => scope.resolve(CircularA)).toThrow('Circular dependency detected');
 	});
+
+	test('detects self-referencing circular dependency (A -> A) in scope', () => {
+		class SelfRef {
+			public constructor(public self: SelfRef) {}
+		}
+
+		const container = createContainer().registerScoped(
+			SelfRef,
+			r => new SelfRef((r as never as { resolve: (t: unknown) => SelfRef }).resolve(SelfRef)),
+		);
+
+		const scope = createScope(container);
+		expect(() => scope.resolve(SelfRef)).toThrow(ContainerError);
+		expect(() => scope.resolve(SelfRef)).toThrow('Circular dependency detected');
+		expect(() => scope.resolve(SelfRef)).toThrow('SelfRef -> SelfRef');
+	});
 });
 
 describe('scoped + async factory', () => {
@@ -449,5 +465,165 @@ describe('tryResolve (scope + dependency graph)', () => {
 		expect(c).toBeInstanceOf(ServiceC);
 		expect(c.b).toBeInstanceOf(ServiceB);
 		expect(c.b.a).toBeInstanceOf(ServiceA);
+	});
+});
+
+describe('scoped factory error recovery', () => {
+	test('propagates factory error to the caller in scope', () => {
+		const container = createContainer().registerScoped(ServiceA, () => {
+			throw new Error('scoped factory failed');
+		});
+
+		const scope = createScope(container);
+		expect(() => scope.resolve(ServiceA)).toThrow('scoped factory failed');
+	});
+
+	test('retries resolution after factory throws in scope — no false circular dependency', () => {
+		let callCount = 0;
+		const container = createContainer().registerScoped(ServiceA, () => {
+			callCount++;
+			if (callCount === 1) {
+				throw new Error('first attempt failed');
+			}
+			return new ServiceA('recovered');
+		});
+
+		const scope = createScope(container);
+		expect(() => scope.resolve(ServiceA)).toThrow('first attempt failed');
+
+		// Second resolve should retry, not throw circular dependency error
+		const instance = scope.resolve(ServiceA);
+		expect(instance).toBeInstanceOf(ServiceA);
+		expect(instance.value).toBe('recovered');
+		expect(callCount).toBe(2);
+	});
+
+	test('scoped instance is not cached when factory throws', () => {
+		let callCount = 0;
+		const container = createContainer().registerScoped(ServiceA, () => {
+			callCount++;
+			if (callCount === 1) {
+				throw new Error('init failed');
+			}
+			return new ServiceA('success');
+		});
+
+		const scope = createScope(container);
+		expect(() => scope.resolve(ServiceA)).toThrow('init failed');
+		expect(callCount).toBe(1);
+
+		const instance = scope.resolve(ServiceA);
+		expect(instance.value).toBe('success');
+		expect(callCount).toBe(2);
+	});
+
+	test('singleton factory error in scope does not affect subsequent resolves', () => {
+		let callCount = 0;
+		const container = createContainer().registerSingleton(ServiceA, () => {
+			callCount++;
+			if (callCount === 1) {
+				throw new Error('singleton failed');
+			}
+			return new ServiceA('ok');
+		});
+
+		const scope = createScope(container);
+		expect(() => scope.resolve(ServiceA)).toThrow('singleton failed');
+
+		const instance = scope.resolve(ServiceA);
+		expect(instance.value).toBe('ok');
+	});
+});
+
+describe('scoped caching edge cases', () => {
+	test('null scoped value is cached — factory is called only once per scope', () => {
+		let callCount = 0;
+		const container = createContainer().registerScoped('nullable', () => {
+			callCount++;
+			return null;
+		});
+
+		const scope = createScope(container);
+		scope.resolve('nullable');
+		scope.resolve('nullable');
+		expect(callCount).toBe(1);
+	});
+
+	test('undefined scoped value — factory is called again due to cache check using !== undefined', () => {
+		let callCount = 0;
+		const container = createContainer().registerScoped('undef', () => {
+			callCount++;
+			return undefined;
+		});
+
+		const scope = createScope(container);
+		scope.resolve('undef');
+		scope.resolve('undef');
+
+		// The cache check uses `!== undefined`, so undefined values are not properly cached.
+		expect(callCount).toBeGreaterThan(1);
+	});
+});
+
+describe('deeply nested scopes (3+ levels)', () => {
+	test('3-level nested scopes each have independent scoped caches', () => {
+		const container = createContainer()
+			.registerSingleton(ServiceA, () => new ServiceA())
+			.registerScoped(RequestContext, () => new RequestContext());
+
+		const scope1 = createScope(container);
+		const scope2 = createScope(scope1);
+		const scope3 = createScope(scope2);
+
+		const ctx1 = scope1.resolve(RequestContext);
+		const ctx2 = scope2.resolve(RequestContext);
+		const ctx3 = scope3.resolve(RequestContext);
+
+		// Each scope has its own scoped instance
+		expect(ctx1).not.toBe(ctx2);
+		expect(ctx2).not.toBe(ctx3);
+		expect(ctx1).not.toBe(ctx3);
+
+		// All scopes share the same singleton
+		const a1 = scope1.resolve(ServiceA);
+		const a2 = scope2.resolve(ServiceA);
+		const a3 = scope3.resolve(ServiceA);
+		expect(a1).toBe(a2);
+		expect(a2).toBe(a3);
+	});
+});
+
+describe('createScope from disposable variants', () => {
+	test('createScope works with DisposableContainer', async () => {
+		const { disposable } = await import('../disposable');
+		const container = disposable(
+			createContainer()
+				.registerSingleton(ServiceA, () => new ServiceA())
+				.registerScoped(RequestContext, () => new RequestContext()),
+		);
+
+		const scope = createScope(container);
+		expect(scope).toBeInstanceOf(Scope);
+		expect(scope.resolve(ServiceA)).toBeInstanceOf(ServiceA);
+		expect(scope.resolve(RequestContext)).toBeInstanceOf(RequestContext);
+	});
+
+	test('createScope works with DisposableScope (nested)', async () => {
+		const { disposable } = await import('../disposable');
+		const container = createContainer()
+			.registerSingleton(ServiceA, () => new ServiceA())
+			.registerScoped(RequestContext, () => new RequestContext());
+
+		const parentScope = disposable(createScope(container));
+		const childScope = createScope(parentScope);
+
+		expect(childScope).toBeInstanceOf(Scope);
+		// Child scope can resolve singleton and scoped tokens
+		expect(childScope.resolve(ServiceA)).toBeInstanceOf(ServiceA);
+		expect(childScope.resolve(RequestContext)).toBeInstanceOf(RequestContext);
+		// Child scope has its own scoped cache — different from parent
+		const childScoped = childScope.resolve(RequestContext);
+		const childScopedAgain = childScope.resolve(RequestContext);
+		expect(childScoped).toBe(childScopedAgain);
 	});
 });

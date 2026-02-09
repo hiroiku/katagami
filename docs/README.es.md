@@ -8,22 +8,24 @@ Contenedor DI ligero para TypeScript con inferencia de tipos completa.
 [![license](https://img.shields.io/npm/l/katagami)](https://github.com/hiroiku/katagami/blob/master/LICENSE)
 [![bundle size](https://img.shields.io/bundlephobia/minzip/katagami)](https://bundlephobia.com/package/katagami)
 
-> El nombre proviene de 型紙 _(katagami)_ — papel de estarcido de precisión utilizado en el teñido tradicional japonés para transferir patrones exactos sobre la tela. Se superponen múltiples estarcidos para componer diseños intrincados, de la misma manera que los tipos se acumulan con cada llamada en la cadena de métodos. Un estarcido solo necesita papel y un pincel, sin maquinaria elaborada — del mismo modo, Katagami no requiere decoradores ni mecanismos de metadatos y funciona con cualquier herramienta de construcción sin configuración adicional. Y al igual que los estarcidos se adaptan a diferentes telas y técnicas, Katagami se adapta a TypeScript y JavaScript, tokens de clase y tokens PropertyKey — un enfoque híbrido para una DI estricta y componible.
+> El nombre proviene de 型紙 _(katagami)_ — papel de estarcido de precisión utilizado en el teñido tradicional japonés para transferir patrones exactos sobre la tela. Se superponen múltiples estarcidos para componer diseños intrincados, de la misma manera que los tipos se acumulan con cada llamada en la cadena de métodos. Cada estarcido es una pieza independiente — se elige solo el necesario para el trabajo actual, el resto se deja aparte — del mismo modo que los exports por subruta aseguran que solo el código que usas entre en tu paquete. El patrón recortado determina exactamente por dónde pasa el tinte y dónde se bloquea, tal como el sistema de tipos de Katagami detecta errores en tiempo de compilación, no en tiempo de ejecución. Y un estarcido solo necesita papel y un pincel, sin maquinaria elaborada — del mismo modo, Katagami no requiere decoradores ni mecanismos de metadatos y funciona con cualquier herramienta de construcción sin configuración adicional.
 
 ## Características
 
 | Característica                       | Descripción                                                                                                                  |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| Cero dependencias                    | Sin decoradores, sin reflect-metadata, sin polyfills — funciona con cualquier bundler sin configuración                      |
 | Inferencia de tipos completa         | Los tipos se acumulan mediante encadenamiento de métodos; los tokens no registrados generan errores en tiempo de compilación |
-| Tres ciclos de vida                  | Singleton, Transient y Scoped con contenedores hijos                                                                         |
-| Fábricas asíncronas                  | Las fábricas que retornan Promise son rastreadas automáticamente por el sistema de tipos                                     |
-| Detección de dependencias circulares | Mensajes de error claros con la ruta completa del ciclo                                                                      |
-| Soporte Disposable                   | TC39 Explicit Resource Management (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`)                                 |
+| Tree-shakeable                       | Exports por subruta (`katagami/scope`, `katagami/disposable`) y `sideEffects: false` para un tamaño de paquete mínimo        |
 | Prevención de dependencias cautivas  | Las fábricas Singleton/Transient no pueden acceder a tokens Scoped; detectado en tiempo de compilación                       |
-| Resolución opcional                  | `tryResolve` devuelve `undefined` para tokens no registrados en lugar de lanzar                                              |
 | Estrategia de tokens híbrida         | Tokens de clase para seguridad de tipos estricta, tokens PropertyKey para flexibilidad                                       |
 | Mapa de tipos con interfaz           | Pasa una interfaz a `createContainer<T>()` para registro independiente del orden                                             |
-| Cero dependencias                    | Sin decoradores, sin reflect-metadata, sin polyfills                                                                         |
+| Tres ciclos de vida                  | Singleton, Transient y Scoped con contenedores hijos                                                                         |
+| Soporte Disposable                   | TC39 Explicit Resource Management (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`)                                 |
+| Composición de módulos               | Los contenedores se pueden componer con `use()` para agrupar y reutilizar registros                                          |
+| Fábricas asíncronas                  | Las fábricas que retornan Promise son rastreadas automáticamente por el sistema de tipos                                     |
+| Detección de dependencias circulares | Mensajes de error claros con la ruta completa del ciclo                                                                      |
+| Resolución opcional                  | `tryResolve` devuelve `undefined` para tokens no registrados en lugar de lanzar                                              |
 
 ## Instalación
 
@@ -65,6 +67,19 @@ La mayoría de los contenedores DI de TypeScript dependen de decoradores, reflec
 ### Sin decoradores, sin reflect-metadata
 
 La DI basada en decoradores requiere las opciones del compilador `experimentalDecorators` y `emitDecoratorMetadata`. Las herramientas de construcción modernas como esbuild y Vite (configuración por defecto) no soportan `emitDecoratorMetadata`, y la propuesta de decoradores estándar TC39 no incluye un equivalente para la emisión automática de metadatos de tipos. Katagami no depende de nada de esto — funciona con cualquier herramienta de construcción sin configuración adicional.
+
+### Tree-shakeable
+
+Katagami se divide en exports por subruta. Importa solo lo que necesitas — `katagami/scope` y `katagami/disposable` se eliminan completamente del paquete si no se importan. Combinado con `sideEffects: false`, los bundlers pueden eliminar cada byte no utilizado.
+
+```ts
+// Solo el núcleo — scope y disposable no se incluyen en el paquete
+import { createContainer } from 'katagami';
+
+// Importa solo lo que necesitas
+import { createScope } from 'katagami/scope';
+import { disposable } from 'katagami/disposable';
+```
 
 ### Inferencia de tipos completa desde tokens de clase
 
@@ -269,6 +284,28 @@ const root = createContainer()
 
 La eliminación del scope solo afecta a las instancias Scoped. Las instancias Singleton son propiedad del contenedor raíz y se eliminan cuando el propio contenedor es eliminado.
 
+El envoltorio `disposable()` también reduce el tipo de retorno, eliminando los métodos de registro (`registerSingleton`, `registerTransient`, `registerScoped`, `use`) a nivel de tipos. Esto previene registros accidentales en un contenedor que podría estar eliminado:
+
+```ts
+const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
+
+container.resolve(Connection); // OK
+container.registerSingleton(/* ... */); // Error en tiempo de compilación
+```
+
+### Tree Shaking
+
+Katagami utiliza exports por subruta para dividir la funcionalidad en puntos de entrada independientes. Si solo necesitas el contenedor principal, `katagami/scope` y `katagami/disposable` se excluyen completamente del paquete. El paquete declara `sideEffects: false`, por lo que los bundlers pueden eliminar de forma segura cualquier código no utilizado.
+
+```ts
+// Solo el núcleo — scope y disposable no se incluyen en el paquete
+import { createContainer } from 'katagami';
+
+// Importa solo lo que necesitas
+import { createScope } from 'katagami/scope';
+import { disposable } from 'katagami/disposable';
+```
+
 ### Mapa de tipos con interfaz
 
 Cuando pasas una interfaz a `createContainer<T>()`, los tokens PropertyKey obtienen sus tipos de la interfaz en lugar de acumularlos mediante encadenamiento. Esto significa que puedes registrar y resolver tokens en cualquier orden:
@@ -346,23 +383,27 @@ const container = createContainer()
 
 Crea un nuevo contenedor DI. Pasa una interfaz como `T` para definir el mapa de tipos para tokens PropertyKey. Pasa `ScopedT` para definir un mapa de tipos separado para tokens PropertyKey Scoped (independiente del orden, igual que `T`).
 
-### `container.registerSingleton(token, factory)`
+### `Container.prototype.registerSingleton(token, factory)`
 
 Registra una fábrica como singleton. La instancia se crea en el primer `resolve` y se almacena en caché. Retorna el contenedor para encadenamiento de métodos.
 
-### `container.registerTransient(token, factory)`
+### `Container.prototype.registerTransient(token, factory)`
 
 Registra una fábrica como transient. Se crea una nueva instancia en cada `resolve`. Retorna el contenedor para encadenamiento de métodos.
 
-### `container.registerScoped(token, factory)`
+### `Container.prototype.registerScoped(token, factory)`
 
 Registra una fábrica como scoped. Dentro de un scope, la instancia se crea en el primer `resolve` y se almacena en caché para ese scope. Cada scope mantiene su propia caché. Los tokens Scoped no pueden resolverse desde el contenedor raíz. Retorna el contenedor para encadenamiento de métodos.
 
-### `container.resolve(token)`
+### `Container.prototype.use(source)`
+
+Copia todos los registros de `source` (otro `Container`) a este contenedor. Solo se copian las entradas de fábrica y ciclo de vida — las cachés de instancias singleton no se comparten. Devuelve el contenedor para encadenamiento de métodos.
+
+### `Container.prototype.resolve(token)`
 
 Resuelve y retorna la instancia para el token dado. Lanza `ContainerError` si el token no está registrado o si se detecta una dependencia circular.
 
-### `container.tryResolve(token)` / `scope.tryResolve(token)`
+### `Container.prototype.tryResolve(token)`
 
 Intenta resolver la instancia para el token dado. Devuelve `undefined` si el token no está registrado, en lugar de lanzar. Aún lanza `ContainerError` para dependencias circulares u operaciones en contenedores/scopes eliminados.
 
@@ -370,19 +411,27 @@ Intenta resolver la instancia para el token dado. Devuelve `undefined` si el tok
 
 Crea un nuevo `Scope` (contenedor hijo) a partir de un `Container` o un `Scope` existente.
 
-### `Scope`
+### `class Scope`
 
-Un contenedor hijo con scope creado por `createScope()`. Proporciona `resolve(token)` y `tryResolve(token)`.
+Un contenedor hijo con scope creado por `createScope()`.
+
+### `Scope.prototype.resolve(token)`
+
+Resuelve y retorna la instancia para el token dado. Se comporta igual que `Container.prototype.resolve`, pero también puede resolver tokens Scoped.
+
+### `Scope.prototype.tryResolve(token)`
+
+Intenta resolver la instancia para el token dado. Devuelve `undefined` si el token no está registrado, en lugar de lanzar. Aún lanza `ContainerError` para dependencias circulares u operaciones en scopes eliminados.
 
 ### `disposable(container)` — `katagami/disposable`
 
-Adjunta `[Symbol.asyncDispose]` a un `Container` o `Scope`, habilitando la sintaxis `await using`. Elimina todas las instancias gestionadas en orden inverso de creación (LIFO). Llama a `[Symbol.asyncDispose]()` o `[Symbol.dispose]()` en cada instancia que los implemente. Idempotente — las llamadas posteriores no hacen nada. Después de la eliminación, `resolve()` lanzará `ContainerError`.
+Adjunta `[Symbol.asyncDispose]` a un `Container` o `Scope`, habilitando la sintaxis `await using`. Elimina todas las instancias gestionadas en orden inverso de creación (LIFO). Llama a `[Symbol.asyncDispose]()` o `[Symbol.dispose]()` en cada instancia que los implemente. Idempotente — las llamadas posteriores no hacen nada. Después de la eliminación, `resolve()` lanzará `ContainerError`. El tipo de retorno se reduce a `DisposableContainer` o `DisposableScope`, que solo exponen `resolve` y `tryResolve` — los métodos de registro se eliminan a nivel de tipos.
 
-### `ContainerError`
+### `class ContainerError`
 
 Clase de error lanzada para fallos del contenedor como resolver un token no registrado, dependencias circulares u operaciones en un contenedor/scope eliminado.
 
-### `Resolver`
+### `type Resolver`
 
 Exportación de tipo que representa el resolver pasado a los callbacks de fábrica. Útil cuando necesitas tipar una función que acepta un parámetro resolver.
 
