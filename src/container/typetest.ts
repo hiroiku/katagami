@@ -561,3 +561,119 @@ createContainer()
 	const _a: ServiceA = childScope.resolve(ServiceA);
 	const _s: ScopedService = childScope.resolve(ScopedService);
 }
+
+// ===========================================================================
+// 44. resolveAll returns V[] for sync class token
+// ===========================================================================
+
+{
+	const container = createContainer()
+		.registerSingleton(ServiceA, () => ({}) as ServiceA)
+		.registerSingleton(ServiceA, () => ({}) as ServiceA);
+
+	// OK — resolveAll returns ServiceA[]
+	const _all: ServiceA[] = container.resolveAll(ServiceA);
+}
+
+// ===========================================================================
+// 45. resolveAll returns Promise<V>[] for async class token
+// ===========================================================================
+
+{
+	const container = createContainer()
+		.registerSingleton(AsyncService, async () => ({}) as AsyncService)
+		.registerSingleton(AsyncService, async () => ({}) as AsyncService);
+
+	// OK — resolveAll returns Promise<AsyncService>[]
+	const _all: Promise<AsyncService>[] = container.resolveAll(AsyncService);
+}
+
+// ===========================================================================
+// 46. resolveAll returns T[K][] for PropertyKey token
+// ===========================================================================
+
+{
+	const container = createContainer()
+		.registerSingleton('greeting', () => 'hello')
+		.registerSingleton('greeting', () => 'world');
+
+	// OK — resolveAll returns string[]
+	const _all: string[] = container.resolveAll('greeting');
+}
+
+// ===========================================================================
+// 47. Scope.resolveAll returns V[] for scoped class token
+// ===========================================================================
+
+{
+	const container = createContainer()
+		.registerScoped(ScopedService, () => ({}) as ScopedService)
+		.registerScoped(ScopedService, () => ({}) as ScopedService);
+
+	const scope = createScope(container);
+
+	// OK — resolveAll returns ScopedService[] from scope
+	const _all: ScopedService[] = scope.resolveAll(ScopedService);
+}
+
+// ===========================================================================
+// 48. tryResolveAll returns V[] | undefined for registered sync class token
+// ===========================================================================
+
+{
+	const container = createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA);
+
+	// OK — tryResolveAll returns ServiceA[] | undefined
+	const _result: ServiceA[] | undefined = container.tryResolveAll(ServiceA);
+}
+
+// ===========================================================================
+// 49. tryResolveAll accepts unregistered class tokens (no compile error)
+// ===========================================================================
+
+{
+	const container = createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA);
+
+	// OK — tryResolveAll accepts unregistered class tokens (returns undefined at runtime)
+	const _result: (UnregisteredService | Promise<UnregisteredService>)[] | undefined =
+		container.tryResolveAll(UnregisteredService);
+}
+
+// ===========================================================================
+// 50. resolveAll in factory (Resolver) for multi-binding injection
+// ===========================================================================
+
+createContainer()
+	.registerSingleton(ServiceA, () => ({}) as ServiceA)
+	.registerSingleton(ServiceA, () => ({}) as ServiceA)
+	// OK — factory can use resolveAll to get all registered instances
+	.registerSingleton(ServiceB, r => ({ b: r.resolveAll(ServiceA).length.toString() }) as ServiceB);
+
+// ===========================================================================
+// 51. disposable() on Container allows resolveAll
+// ===========================================================================
+
+{
+	const container = disposable(
+		createContainer()
+			.registerSingleton(ServiceA, () => ({}) as ServiceA)
+			.registerSingleton(ServiceA, () => ({}) as ServiceA),
+	);
+
+	// OK — resolveAll is available after disposable()
+	const _all: ServiceA[] = container.resolveAll(ServiceA);
+}
+
+// ===========================================================================
+// 52. disposable() on Scope allows resolveAll
+// ===========================================================================
+
+{
+	const root = createContainer()
+		.registerScoped(ScopedService, () => ({}) as ScopedService)
+		.registerScoped(ScopedService, () => ({}) as ScopedService);
+	const scope = disposable(createScope(root));
+
+	// OK — resolveAll is available on disposable scope
+	const _all: ScopedService[] = scope.resolveAll(ScopedService);
+}

@@ -36,6 +36,33 @@ export interface Resolver<
 	tryResolve<K extends keyof T>(token: K): T[K] | undefined;
 	tryResolve<V>(token: AbstractConstructor<V>): V | Promise<V> | undefined;
 	tryResolve(token: PropertyKey): unknown;
+
+	/**
+	 * Resolve all instances for the given token.
+	 *
+	 * Returns an array of instances from all registrations for the token.
+	 *
+	 * @param token A registered token
+	 * @returns An array of instances associated with the token
+	 */
+	resolveAll<V>(token: AbstractConstructor<V> & Async): Promise<V>[];
+	resolveAll<V>(token: AbstractConstructor<V> & Sync): V[];
+	resolveAll<K extends keyof T>(token: K): T[K][];
+
+	/**
+	 * Try to resolve all instances for the given token.
+	 *
+	 * Returns `undefined` instead of throwing when the token is not registered.
+	 * Other errors (circular dependency, disposed container) are still thrown.
+	 *
+	 * @param token A token to resolve
+	 * @returns An array of instances associated with the token, or `undefined` if not registered
+	 */
+	tryResolveAll<V>(token: AbstractConstructor<V> & Async): Promise<V>[] | undefined;
+	tryResolveAll<V>(token: AbstractConstructor<V> & Sync): V[] | undefined;
+	tryResolveAll<K extends keyof T>(token: K): T[K][] | undefined;
+	tryResolveAll<V>(token: AbstractConstructor<V>): (V | Promise<V>)[] | undefined;
+	tryResolveAll(token: PropertyKey): unknown;
 }
 
 /**

@@ -1,6 +1,6 @@
 {
 	"name": "katagami",
-	"version": "2.1.0",
+	"version": "2.2.0",
 	"description": "Lightweight DI container for TypeScript and JavaScript — full type inference, no decorators, no reflect-metadata, hybrid class & PropertyKey tokens.",
 	"license": "MIT",
 	"type": "module",

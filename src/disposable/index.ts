@@ -6,7 +6,7 @@ import type { Scope } from '../scope';
 /**
  * A container wrapped with `disposable()`.
  *
- * Only `resolve` and `tryResolve` are available at the type level.
+ * Only `resolve`, `tryResolve`, `resolveAll`, and `tryResolveAll` are available at the type level.
  * Registration methods (`registerSingleton`, `registerTransient`, `registerScoped`, `use`)
  * are excluded, preventing accidental registration on a potentially-disposed container.
  *
@@ -32,7 +32,7 @@ export interface DisposableContainer<
 /**
  * A scope wrapped with `disposable()`.
  *
- * Only `resolve` and `tryResolve` are available at the type level.
+ * Only `resolve`, `tryResolve`, `resolveAll`, and `tryResolveAll` are available at the type level.
  *
  * @template T PropertyKey-based token type map
  * @template Sync Union of registered sync class constructors
@@ -60,7 +60,7 @@ export interface DisposableScope<
  * Disposes owned instances in reverse creation order (LIFO), calling
  * `[Symbol.asyncDispose]()` or `[Symbol.dispose]()` on each instance that implements them.
  *
- * The returned type is narrowed to only expose `resolve` and `tryResolve`,
+ * The returned type is narrowed to only expose `resolve`, `tryResolve`, `resolveAll`, and `tryResolveAll`,
  * preventing registration methods from being called on a potentially-disposed container.
  *
  * @param container A Container or Scope to make disposable
@@ -106,7 +106,7 @@ export function disposable<C extends { readonly [INTERNALS]: ContainerInternals 
 
 		internals.markDisposed();
 
-		const instances = [...internals.ownInstances.values()].reverse();
+		const instances = [...internals.ownCache.values()].reverse();
 		const errors: unknown[] = [];
 
 		for (const instance of instances) {
@@ -129,7 +129,7 @@ export function disposable<C extends { readonly [INTERNALS]: ContainerInternals 
 			}
 		}
 
-		internals.ownInstances.clear();
+		internals.ownCache.clear();
 
 		if (errors.length > 0) {
 			throw new AggregateError(errors, 'One or more errors occurred during disposal.');

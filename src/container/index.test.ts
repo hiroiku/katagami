@@ -716,21 +716,20 @@ describe('async singleton (rejected Promise)', () => {
 	});
 });
 
-describe('registration override after resolve', () => {
-	test('override after resolve still returns the cached instance (stale cache)', () => {
+describe('registration after resolve', () => {
+	test('new registration after resolve creates a new instance (per-registration cache)', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA('first'));
 
-		// Resolve caches the 'first' instance
+		// Resolve caches the 'first' instance for the first registration
 		const cached = container.resolve(ServiceA);
 		expect(cached.value).toBe('first');
 
-		// Override the registration
+		// Add a new registration — resolve() now uses the last registration
 		container.registerSingleton(ServiceA, () => new ServiceA('second'));
 
-		// Cached instance is still returned because the cache check happens before registration lookup
 		const result = container.resolve(ServiceA);
-		expect(result.value).toBe('first');
-		expect(result).toBe(cached);
+		expect(result.value).toBe('second');
+		expect(result).not.toBe(cached);
 	});
 });
 

@@ -16,14 +16,14 @@ export const INTERNALS = Symbol('katagami.internals');
  * @internal
  */
 export interface ContainerInternals {
-	/** All registrations (singleton / transient / scoped). */
-	readonly registrations: Map<unknown, Registration>;
+	/** All registrations (singleton / transient / scoped). Each token maps to an array of registrations. */
+	readonly registrations: Map<unknown, Registration[]>;
 
-	/** Instance cache used during resolution (Container: singletons, Scope: singletonInstances). */
-	readonly instances: Map<unknown, unknown>;
+	/** Singleton cache keyed by Registration object (Container: singletons, Scope: shared with parent). */
+	readonly singletonCache: Map<Registration, unknown>;
 
-	/** Instances owned by this container / scope (disposal target). */
-	readonly ownInstances: Map<unknown, unknown>;
+	/** Instances owned by this container / scope (disposal target), keyed by Registration object. */
+	readonly ownCache: Map<Registration, unknown>;
 
 	/** Whether this container / scope has been disposed. */
 	isDisposed(): boolean;
