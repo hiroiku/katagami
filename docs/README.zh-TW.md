@@ -17,7 +17,7 @@
 | 零依賴          | 無需裝飾器、無需 reflect-metadata、無需 polyfill — 適用於任何建置工具，開箱即用                 |
 | 完整的型別推斷  | 型別隨方法鏈累積；解析未註冊的令牌會產生編譯時錯誤                                              |
 | Tree Shaking    | 子路徑匯出（`katagami/scope`、`katagami/disposable`）配合 `sideEffects: false` 實現最小套件大小 |
-| 捕獲依賴防護    | Singleton/Transient 工廠無法存取 Scoped 令牌；在編譯時捕獲                                      |
+| 捕獲依賴防護    | Singleton/Transient 工廠無法存取 Scoped 令牌；在編譯時及作用域內的執行時捕獲                    |
 | 混合令牌策略    | 類別令牌提供嚴格的型別安全，PropertyKey 令牌提供彈性                                            |
 | 介面型別映射    | 向 `createContainer<T>()` 傳入介面，實現與註冊順序無關的註冊                                    |
 | 三種生命週期    | Singleton、Transient 和 Scoped（支援子容器）                                                    |
@@ -466,6 +466,24 @@ const container = createContainer()
 		r.resolve(DbPool); // OK — Scoped 工廠可以解析 Singleton 令牌
 		return new RequestContext();
 	});
+```
+
+Katagami 也在作用域內的執行時強制執行此規則。如果 Singleton 工廠嘗試直接或間接解析 Scoped 令牌，將拋出 `ContainerError`：
+
+```ts
+import { createContainer } from 'katagami';
+import { createScope } from 'katagami/scope';
+
+class DbPool {}
+class RequestContext {}
+
+const container = createContainer()
+	.registerScoped(RequestContext, () => new RequestContext())
+	.registerSingleton(DbPool, r => new DbPool(r.resolve(RequestContext)));
+
+const scope = createScope(container);
+scope.resolve(DbPool);
+// ContainerError: Captive dependency detected: scoped token "RequestContext" cannot be resolved inside a singleton factory.
 ```
 
 ### 選擇性解析（tryResolve）

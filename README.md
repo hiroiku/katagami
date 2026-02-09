@@ -17,7 +17,7 @@ Lightweight TypeScript DI container with full type inference.
 | Zero dependencies             | No decorators, no reflect-metadata, no polyfills — works with any bundler out of the box                   |
 | Full type inference           | Types accumulate through method chaining; unregistered tokens are compile-time errors                      |
 | Tree-shakeable                | Subpath exports (`katagami/scope`, `katagami/disposable`) and `sideEffects: false` for minimal bundle size |
-| Captive dependency prevention | Singleton/Transient factories cannot access scoped tokens; caught at compile time                          |
+| Captive dependency prevention | Singleton/Transient factories cannot access scoped tokens; caught at compile time and runtime in scopes    |
 | Hybrid token strategy         | Class tokens for strict type safety, PropertyKey tokens for flexibility                                    |
 | Interface type map            | Pass an interface to `createContainer<T>()` for order-independent registration                             |
 | Three lifetimes               | Singleton, Transient, and Scoped with child containers                                                     |
@@ -466,6 +466,24 @@ const container = createContainer()
 		r.resolve(DbPool); // OK — scoped factory can resolve singleton tokens
 		return new RequestContext();
 	});
+```
+
+Katagami also enforces this rule at runtime within scopes. If a singleton factory attempts to resolve a scoped token — directly or through intermediaries — a `ContainerError` is thrown:
+
+```ts
+import { createContainer } from 'katagami';
+import { createScope } from 'katagami/scope';
+
+class DbPool {}
+class RequestContext {}
+
+const container = createContainer()
+	.registerScoped(RequestContext, () => new RequestContext())
+	.registerSingleton(DbPool, r => new DbPool(r.resolve(RequestContext)));
+
+const scope = createScope(container);
+scope.resolve(DbPool);
+// ContainerError: Captive dependency detected: scoped token "RequestContext" cannot be resolved inside a singleton factory.
 ```
 
 ### Optional Resolution (tryResolve)

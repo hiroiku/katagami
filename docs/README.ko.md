@@ -17,7 +17,7 @@
 | 제로 의존성          | 데코레이터 불필요, reflect-metadata 불필요, 폴리필 불필요 — 어떤 번들러에서든 바로 사용 가능            |
 | 완전한 타입 추론     | 메서드 체이닝으로 타입이 축적되며, 미등록 토큰 해석은 컴파일 타임 오류 발생                             |
 | Tree Shaking 지원    | 서브패스 익스포트(`katagami/scope`, `katagami/disposable`)와 `sideEffects: false`로 최소 번들 크기 실현 |
-| 캡티브 의존성 방지   | Singleton/Transient 팩토리는 Scoped 토큰에 접근 불가; 컴파일 타임에 감지                                |
+| 캡티브 의존성 방지   | Singleton/Transient 팩토리는 Scoped 토큰에 접근 불가; 컴파일 타임 및 스코프 내 런타임에 감지            |
 | 하이브리드 토큰 전략 | 클래스 토큰으로 엄격한 타입 안전성, PropertyKey 토큰으로 유연성                                         |
 | 인터페이스 타입 맵   | `createContainer<T>()`에 인터페이스를 전달하여 등록 순서 무관한 등록                                    |
 | 세 가지 라이프타임   | Singleton, Transient, Scoped (자식 컨테이너 지원)                                                       |
@@ -425,6 +425,24 @@ const container = createContainer()
 		r.resolve(DbPool); // OK — Scoped 팩토리는 Singleton 토큰을 해석할 수 있음
 		return new RequestContext();
 	});
+```
+
+Katagami는 스코프 내에서 이 규칙을 런타임에도 적용합니다. Singleton 팩토리가 Scoped 토큰을 직접 또는 간접적으로 해석하려고 하면 `ContainerError`가 throw됩니다:
+
+```ts
+import { createContainer } from 'katagami';
+import { createScope } from 'katagami/scope';
+
+class DbPool {}
+class RequestContext {}
+
+const container = createContainer()
+	.registerScoped(RequestContext, () => new RequestContext())
+	.registerSingleton(DbPool, r => new DbPool(r.resolve(RequestContext)));
+
+const scope = createScope(container);
+scope.resolve(DbPool);
+// ContainerError: Captive dependency detected: scoped token "RequestContext" cannot be resolved inside a singleton factory.
 ```
 
 ### 선택적 해석 (tryResolve)

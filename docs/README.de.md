@@ -12,21 +12,21 @@ Leichtgewichtiger TypeScript-DI-Container mit vollständiger Typinferenz.
 
 ## Funktionen
 
-| Funktion                               | Beschreibung                                                                                                          |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Null Abhängigkeiten                    | Keine Decorators, kein reflect-metadata, keine Polyfills — funktioniert mit jedem Bundler direkt einsatzbereit        |
-| Vollständige Typinferenz               | Typen akkumulieren sich durch Methodenverkettung; nicht registrierte Token erzeugen Kompilierzeitfehler               |
-| Tree-Shaking-fähig                     | Subpath-Exports (`katagami/scope`, `katagami/disposable`) und `sideEffects: false` für minimale Bundle-Größe          |
-| Verhinderung gefangener Abhängigkeiten | Singleton-/Transient-Factories können nicht auf Scoped-Token zugreifen; wird zur Kompilierzeit erkannt                |
-| Hybride Token-Strategie                | Klassen-Token für strikte Typsicherheit, PropertyKey-Token für Flexibilität                                           |
-| Interface-Typ-Map                      | Übergeben Sie ein Interface an `createContainer<T>()` für reihenfolgeunabhängige Registrierung                        |
-| Drei Lebenszyklen                      | Singleton, Transient und Scoped mit Kind-Containern                                                                   |
-| Disposable-Unterstützung               | TC39 Explicit Resource Management (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`)                          |
-| Modulkomposition                       | Container können mit `use()` komponiert werden, um Registrierungen zu gruppieren und wiederzuverwenden                |
-| Asynchrone Factories                   | Promise-zurückgebende Factories werden automatisch vom Typsystem verfolgt                                             |
-| Erkennung zirkulärer Abhängigkeiten    | Klare Fehlermeldungen mit dem vollständigen Zykluspfad                                                                |
-| Optionale Auflösung                    | `tryResolve` gibt `undefined` für nicht registrierte Token zurück statt zu werfen                                     |
-| Verzögerte Auflösung                   | Proxy-basierte verzögerte Instanziierung über `lazy()` aus `katagami/lazy`; Instanz wird beim ersten Zugriff erstellt |
+| Funktion                               | Beschreibung                                                                                                                      |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Null Abhängigkeiten                    | Keine Decorators, kein reflect-metadata, keine Polyfills — funktioniert mit jedem Bundler direkt einsatzbereit                    |
+| Vollständige Typinferenz               | Typen akkumulieren sich durch Methodenverkettung; nicht registrierte Token erzeugen Kompilierzeitfehler                           |
+| Tree-Shaking-fähig                     | Subpath-Exports (`katagami/scope`, `katagami/disposable`) und `sideEffects: false` für minimale Bundle-Größe                      |
+| Verhinderung gefangener Abhängigkeiten | Singleton-/Transient-Factories können nicht auf Scoped-Token zugreifen; wird zur Kompilierzeit und zur Laufzeit in Scopes erkannt |
+| Hybride Token-Strategie                | Klassen-Token für strikte Typsicherheit, PropertyKey-Token für Flexibilität                                                       |
+| Interface-Typ-Map                      | Übergeben Sie ein Interface an `createContainer<T>()` für reihenfolgeunabhängige Registrierung                                    |
+| Drei Lebenszyklen                      | Singleton, Transient und Scoped mit Kind-Containern                                                                               |
+| Disposable-Unterstützung               | TC39 Explicit Resource Management (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`)                                      |
+| Modulkomposition                       | Container können mit `use()` komponiert werden, um Registrierungen zu gruppieren und wiederzuverwenden                            |
+| Asynchrone Factories                   | Promise-zurückgebende Factories werden automatisch vom Typsystem verfolgt                                                         |
+| Erkennung zirkulärer Abhängigkeiten    | Klare Fehlermeldungen mit dem vollständigen Zykluspfad                                                                            |
+| Optionale Auflösung                    | `tryResolve` gibt `undefined` für nicht registrierte Token zurück statt zu werfen                                                 |
+| Verzögerte Auflösung                   | Proxy-basierte verzögerte Instanziierung über `lazy()` aus `katagami/lazy`; Instanz wird beim ersten Zugriff erstellt             |
 
 ## Installation
 
@@ -466,6 +466,24 @@ const container = createContainer()
 		r.resolve(DbPool); // OK — Scoped-Factory kann Singleton-Token auflösen
 		return new RequestContext();
 	});
+```
+
+Katagami erzwingt diese Regel auch zur Laufzeit innerhalb von Scopes. Wenn eine Singleton-Factory versucht, ein Scoped-Token aufzulösen — direkt oder über Zwischenstationen — wird ein `ContainerError` geworfen:
+
+```ts
+import { createContainer } from 'katagami';
+import { createScope } from 'katagami/scope';
+
+class DbPool {}
+class RequestContext {}
+
+const container = createContainer()
+	.registerScoped(RequestContext, () => new RequestContext())
+	.registerSingleton(DbPool, r => new DbPool(r.resolve(RequestContext)));
+
+const scope = createScope(container);
+scope.resolve(DbPool);
+// ContainerError: Captive dependency detected: scoped token "RequestContext" cannot be resolved inside a singleton factory.
 ```
 
 ### Optionale Auflösung (tryResolve)

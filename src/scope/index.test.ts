@@ -224,7 +224,7 @@ describe('scoped + circular dependency detection', () => {
 		expect(() => scope.resolve(CircularA)).toThrow('CircularA -> CircularB -> CircularA');
 	});
 
-	test('detects circular dependency with mixed lifetimes in scope', () => {
+	test('detects captive dependency with mixed lifetimes in scope (singleton → scoped)', () => {
 		const container = createContainer()
 			.registerSingleton(
 				CircularA,
@@ -236,7 +236,7 @@ describe('scoped + circular dependency detection', () => {
 			);
 
 		const scope = createScope(container);
-		expect(() => scope.resolve(CircularA)).toThrow('Circular dependency detected');
+		expect(() => scope.resolve(CircularA)).toThrow('Captive dependency detected');
 	});
 
 	test('detects self-referencing circular dependency (A -> A) in scope', () => {
@@ -590,6 +590,193 @@ describe('deeply nested scopes (3+ levels)', () => {
 		const a3 = scope3.resolve(ServiceA);
 		expect(a1).toBe(a2);
 		expect(a2).toBe(a3);
+	});
+});
+
+describe('captive dependency detection', () => {
+	test('singleton → scoped (direct captive) throws ContainerError', () => {
+		const container = createContainer()
+			.registerScoped(RequestContext, () => new RequestContext())
+			.registerSingleton(
+				ServiceA,
+				r =>
+					new ServiceA(String((r as never as { resolve: (t: unknown) => RequestContext }).resolve(RequestContext).id)),
+			);
+
+		const scope = createScope(container);
+		expect(() => scope.resolve(ServiceA)).toThrow(ContainerError);
+		expect(() => scope.resolve(ServiceA)).toThrow('Captive dependency detected');
+	});
+
+	test('singleton → transient → scoped (indirect captive) throws ContainerError', () => {
+		const container = createContainer()
+			.registerScoped(RequestContext, () => new RequestContext())
+			.registerTransient(
+				ServiceB,
+				r => new ServiceB((r as never as { resolve: (t: unknown) => ServiceA }).resolve(RequestContext) as never),
+			)
+			.registerSingleton(
+				ServiceA,
+				r => new ServiceA(String((r as never as { resolve: (t: unknown) => ServiceB }).resolve(ServiceB))),
+			);
+
+		const scope = createScope(container);
+		expect(() => scope.resolve(ServiceA)).toThrow(ContainerError);
+		expect(() => scope.resolve(ServiceA)).toThrow('Captive dependency detected');
+	});
+
+	test('singleton → singleton → scoped (chain) throws ContainerError', () => {
+		class Inner {
+			public constructor(public ctx: RequestContext) {}
+		}
+
+		const container = createContainer()
+			.registerScoped(RequestContext, () => new RequestContext())
+			.registerSingleton(
+				Inner,
+				r => new Inner((r as never as { resolve: (t: unknown) => RequestContext }).resolve(RequestContext)),
+			)
+			.registerSingleton(
+				ServiceA,
+				r => new ServiceA(String((r as never as { resolve: (t: unknown) => Inner }).resolve(Inner))),
+			);
+
+		const scope = createScope(container);
+		expect(() => scope.resolve(ServiceA)).toThrow(ContainerError);
+		expect(() => scope.resolve(ServiceA)).toThrow('Captive dependency detected');
+	});
+
+	test('scoped → scoped (normal) succeeds', () => {
+		const container = createContainer()
+			.registerScoped(RequestContext, () => new RequestContext())
+			.registerScoped(UserRepository, r => new UserRepository(r.resolve(RequestContext)));
+
+		const scope = createScope(container);
+		const repo = scope.resolve(UserRepository);
+		expect(repo).toBeInstanceOf(UserRepository);
+		expect(repo.ctx).toBeInstanceOf(RequestContext);
+	});
+
+	test('transient → scoped (normal) succeeds', () => {
+		const container = createContainer()
+			.registerScoped(RequestContext, () => new RequestContext())
+			.registerTransient(
+				UserRepository,
+				r => new UserRepository((r as never as { resolve: (t: unknown) => RequestContext }).resolve(RequestContext)),
+			);
+
+		const scope = createScope(container);
+		const repo = scope.resolve(UserRepository);
+		expect(repo).toBeInstanceOf(UserRepository);
+		expect(repo.ctx).toBeInstanceOf(RequestContext);
+	});
+
+	test('singleton → singleton (normal) succeeds', () => {
+		const container = createContainer()
+			.registerSingleton(ServiceA, () => new ServiceA())
+			.registerSingleton(ServiceB, r => new ServiceB(r.resolve(ServiceA)));
+
+		const scope = createScope(container);
+		const b = scope.resolve(ServiceB);
+		expect(b).toBeInstanceOf(ServiceB);
+		expect(b.a).toBeInstanceOf(ServiceA);
+	});
+
+	test('singleton → transient (normal) succeeds', () => {
+		const container = createContainer()
+			.registerTransient(ServiceA, () => new ServiceA())
+			.registerSingleton(
+				ServiceB,
+				r => new ServiceB((r as never as { resolve: (t: unknown) => ServiceA }).resolve(ServiceA)),
+			);
+
+		const scope = createScope(container);
+		const b = scope.resolve(ServiceB);
+		expect(b).toBeInstanceOf(ServiceB);
+		expect(b.a).toBeInstanceOf(ServiceA);
+	});
+
+	test('resolveAll captive throws ContainerError', () => {
+		class ScopedDep {
+			public constructor(public value = 'dep') {}
+		}
+
+		const container = createContainer()
+			.registerScoped(ScopedDep, () => new ScopedDep())
+			.registerSingleton(
+				ServiceA,
+				r => new ServiceA(String((r as never as { resolve: (t: unknown) => ScopedDep }).resolve(ScopedDep))),
+			);
+
+		const scope = createScope(container);
+		expect(() => scope.resolveAll(ServiceA)).toThrow(ContainerError);
+		expect(() => scope.resolveAll(ServiceA)).toThrow('Captive dependency detected');
+	});
+
+	test('tryResolve captive throws ContainerError', () => {
+		const container = createContainer()
+			.registerScoped(RequestContext, () => new RequestContext())
+			.registerSingleton(
+				ServiceA,
+				r =>
+					new ServiceA(String((r as never as { resolve: (t: unknown) => RequestContext }).resolve(RequestContext).id)),
+			);
+
+		const scope = createScope(container);
+		expect(() => scope.tryResolve(ServiceA)).toThrow(ContainerError);
+		expect(() => scope.tryResolve(ServiceA)).toThrow('Captive dependency detected');
+	});
+
+	test('scoped cached before singleton factory still throws ContainerError', () => {
+		const container = createContainer()
+			.registerScoped(RequestContext, () => new RequestContext())
+			.registerSingleton(
+				ServiceA,
+				r =>
+					new ServiceA(String((r as never as { resolve: (t: unknown) => RequestContext }).resolve(RequestContext).id)),
+			);
+
+		const scope = createScope(container);
+		// Pre-cache the scoped instance
+		scope.resolve(RequestContext);
+		// Singleton factory tries to resolve cached scoped — still captive
+		expect(() => scope.resolve(ServiceA)).toThrow(ContainerError);
+		expect(() => scope.resolve(ServiceA)).toThrow('Captive dependency detected');
+	});
+
+	test('error message contains "Captive dependency detected" and token name', () => {
+		const container = createContainer()
+			.registerScoped(RequestContext, () => new RequestContext())
+			.registerSingleton(
+				ServiceA,
+				r =>
+					new ServiceA(String((r as never as { resolve: (t: unknown) => RequestContext }).resolve(RequestContext).id)),
+			);
+
+		const scope = createScope(container);
+		expect(() => scope.resolve(ServiceA)).toThrow('Captive dependency detected');
+		expect(() => scope.resolve(ServiceA)).toThrow('RequestContext');
+	});
+
+	test('singletonDepth recovers after factory error', () => {
+		let shouldThrow = true;
+		const container = createContainer()
+			.registerScoped(RequestContext, () => new RequestContext())
+			.registerSingleton(ServiceA, () => {
+				if (shouldThrow) {
+					throw new Error('factory error');
+				}
+				return new ServiceA('ok');
+			});
+
+		const scope = createScope(container);
+		expect(() => scope.resolve(ServiceA)).toThrow('factory error');
+
+		// After singleton factory error, singletonDepth should be back to 0
+		// so resolving scoped should succeed
+		shouldThrow = false;
+		const ctx = scope.resolve(RequestContext);
+		expect(ctx).toBeInstanceOf(RequestContext);
 	});
 });
 

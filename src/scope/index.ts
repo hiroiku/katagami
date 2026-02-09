@@ -91,6 +91,7 @@ export class Scope<
 	private readonly singletonCache: Map<Registration, unknown>;
 	private readonly scopedCache: Map<Registration, unknown>;
 	private readonly resolvingTokens: Set<unknown>;
+	private singletonDepth = 0;
 	private disposed = false;
 
 	/**
@@ -221,6 +222,12 @@ export class Scope<
 			return singletonCached;
 		}
 
+		if (registration.lifetime === 'scoped' && this.singletonDepth > 0) {
+			throw new ContainerError(
+				`Captive dependency detected: scoped token "${tokenToString(token)}" cannot be resolved inside a singleton factory. Scoped instances must not be captured by singletons.`,
+			);
+		}
+
 		const scopedCached = this.scopedCache.get(registration as Registration);
 
 		if (scopedCached !== undefined) {
@@ -232,6 +239,10 @@ export class Scope<
 		}
 
 		this.resolvingTokens.add(token);
+
+		if (registration.lifetime === 'singleton') {
+			this.singletonDepth++;
+		}
 
 		try {
 			const instance = registration.factory(
@@ -246,6 +257,9 @@ export class Scope<
 
 			return instance;
 		} finally {
+			if (registration.lifetime === 'singleton') {
+				this.singletonDepth--;
+			}
 			this.resolvingTokens.delete(token);
 		}
 	}
@@ -292,21 +306,39 @@ export class Scope<
 					return singletonCached;
 				}
 
+				if (reg.lifetime === 'scoped' && this.singletonDepth > 0) {
+					throw new ContainerError(
+						`Captive dependency detected: scoped token "${tokenToString(token)}" cannot be resolved inside a singleton factory. Scoped instances must not be captured by singletons.`,
+					);
+				}
+
 				const scopedCached = this.scopedCache.get(registration);
 
 				if (scopedCached !== undefined) {
 					return scopedCached;
 				}
 
-				const instance = reg.factory(this as unknown as Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>);
-
 				if (reg.lifetime === 'singleton') {
-					this.singletonCache.set(registration, instance);
-				} else if (reg.lifetime === 'scoped') {
-					this.scopedCache.set(registration, instance);
+					this.singletonDepth++;
 				}
 
-				return instance;
+				try {
+					const instance = reg.factory(
+						this as unknown as Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>,
+					);
+
+					if (reg.lifetime === 'singleton') {
+						this.singletonCache.set(registration, instance);
+					} else if (reg.lifetime === 'scoped') {
+						this.scopedCache.set(registration, instance);
+					}
+
+					return instance;
+				} finally {
+					if (reg.lifetime === 'singleton') {
+						this.singletonDepth--;
+					}
+				}
 			});
 		} finally {
 			this.resolvingTokens.delete(token);

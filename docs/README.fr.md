@@ -12,21 +12,21 @@ Conteneur DI léger pour TypeScript avec inférence de types complète.
 
 ## Fonctionnalités
 
-| Fonctionnalité                        | Description                                                                                                                  |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Zéro dépendance                       | Pas de décorateurs, pas de reflect-metadata, pas de polyfills — fonctionne avec n'importe quel bundler sans configuration    |
-| Inférence de types complète           | Les types s'accumulent par chaînage de méthodes ; les tokens non enregistrés provoquent des erreurs à la compilation         |
-| Tree-shakeable                        | Exports par sous-chemin (`katagami/scope`, `katagami/disposable`) et `sideEffects: false` pour une taille de bundle minimale |
-| Prévention des dépendances captives   | Les factories Singleton/Transient ne peuvent pas accéder aux tokens Scoped ; détecté à la compilation                        |
-| Stratégie de tokens hybride           | Tokens de classe pour une sécurité de types stricte, tokens PropertyKey pour la flexibilité                                  |
-| Carte de types par interface          | Passez une interface à `createContainer<T>()` pour un enregistrement indépendant de l'ordre                                  |
-| Trois cycles de vie                   | Singleton, Transient et Scoped avec conteneurs enfants                                                                       |
-| Support Disposable                    | TC39 Explicit Resource Management (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`)                                 |
-| Composition de modules                | Les conteneurs peuvent être composés via `use()` pour grouper et réutiliser les enregistrements                              |
-| Factories asynchrones                 | Les factories retournant des Promise sont automatiquement suivies par le système de types                                    |
-| Détection des dépendances circulaires | Messages d'erreur clairs avec le chemin complet du cycle                                                                     |
-| Résolution optionnelle                | `tryResolve` retourne `undefined` pour les tokens non enregistrés au lieu de lever une exception                             |
-| Résolution différée                   | Instanciation différée basée sur Proxy via `lazy()` de `katagami/lazy` ; instance créée au premier accès                     |
+| Fonctionnalité                        | Description                                                                                                                            |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Zéro dépendance                       | Pas de décorateurs, pas de reflect-metadata, pas de polyfills — fonctionne avec n'importe quel bundler sans configuration              |
+| Inférence de types complète           | Les types s'accumulent par chaînage de méthodes ; les tokens non enregistrés provoquent des erreurs à la compilation                   |
+| Tree-shakeable                        | Exports par sous-chemin (`katagami/scope`, `katagami/disposable`) et `sideEffects: false` pour une taille de bundle minimale           |
+| Prévention des dépendances captives   | Les factories Singleton/Transient ne peuvent pas accéder aux tokens Scoped ; détecté à la compilation et à l'exécution dans les scopes |
+| Stratégie de tokens hybride           | Tokens de classe pour une sécurité de types stricte, tokens PropertyKey pour la flexibilité                                            |
+| Carte de types par interface          | Passez une interface à `createContainer<T>()` pour un enregistrement indépendant de l'ordre                                            |
+| Trois cycles de vie                   | Singleton, Transient et Scoped avec conteneurs enfants                                                                                 |
+| Support Disposable                    | TC39 Explicit Resource Management (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`)                                           |
+| Composition de modules                | Les conteneurs peuvent être composés via `use()` pour grouper et réutiliser les enregistrements                                        |
+| Factories asynchrones                 | Les factories retournant des Promise sont automatiquement suivies par le système de types                                              |
+| Détection des dépendances circulaires | Messages d'erreur clairs avec le chemin complet du cycle                                                                               |
+| Résolution optionnelle                | `tryResolve` retourne `undefined` pour les tokens non enregistrés au lieu de lever une exception                                       |
+| Résolution différée                   | Instanciation différée basée sur Proxy via `lazy()` de `katagami/lazy` ; instance créée au premier accès                               |
 
 ## Installation
 
@@ -466,6 +466,24 @@ const container = createContainer()
 		r.resolve(DbPool); // OK — la factory Scoped peut résoudre les tokens Singleton
 		return new RequestContext();
 	});
+```
+
+Katagami applique également cette règle à l'exécution dans les scopes. Si une factory singleton tente de résoudre un token Scoped — directement ou via des intermédiaires — une `ContainerError` est levée :
+
+```ts
+import { createContainer } from 'katagami';
+import { createScope } from 'katagami/scope';
+
+class DbPool {}
+class RequestContext {}
+
+const container = createContainer()
+	.registerScoped(RequestContext, () => new RequestContext())
+	.registerSingleton(DbPool, r => new DbPool(r.resolve(RequestContext)));
+
+const scope = createScope(container);
+scope.resolve(DbPool);
+// ContainerError: Captive dependency detected: scoped token "RequestContext" cannot be resolved inside a singleton factory.
 ```
 
 ## API

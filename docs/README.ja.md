@@ -17,7 +17,7 @@
 | ゼロ依存                 | デコレータ不要、reflect-metadata 不要、ポリフィル不要 — どのバンドラーでもそのまま動作                            |
 | 完全な型推論             | メソッドチェーンで型が蓄積され、未登録トークンの解決はコンパイル時エラーになる                                    |
 | Tree Shaking 対応        | サブパスエクスポート（`katagami/scope`、`katagami/disposable`）と `sideEffects: false` で最小バンドルサイズを実現 |
-| キャプティブ依存の防止   | Singleton/Transient のファクトリから Scoped トークンへのアクセスをコンパイル時に防止                              |
+| キャプティブ依存の防止   | Singleton/Transient のファクトリから Scoped トークンへのアクセスをコンパイル時およびスコープ内のランタイムで防止  |
 | ハイブリッドトークン戦略 | クラストークンで厳密な型安全性、PropertyKey トークンで柔軟性                                                      |
 | インターフェース型マップ | `createContainer<T>()` にインターフェースを渡して登録順序非依存に                                                 |
 | 3 つのライフタイム       | Singleton、Transient、Scoped（子コンテナ対応）                                                                    |
@@ -466,6 +466,24 @@ const container = createContainer()
 		r.resolve(DbPool); // OK — Scoped のファクトリは Singleton トークンを解決できる
 		return new RequestContext();
 	});
+```
+
+Katagami はこのルールをスコープ内のランタイムでも適用します。Singleton のファクトリが Scoped トークンを直接的または間接的に解決しようとすると、`ContainerError` がスローされます：
+
+```ts
+import { createContainer } from 'katagami';
+import { createScope } from 'katagami/scope';
+
+class DbPool {}
+class RequestContext {}
+
+const container = createContainer()
+	.registerScoped(RequestContext, () => new RequestContext())
+	.registerSingleton(DbPool, r => new DbPool(r.resolve(RequestContext)));
+
+const scope = createScope(container);
+scope.resolve(DbPool);
+// ContainerError: Captive dependency detected: scoped token "RequestContext" cannot be resolved inside a singleton factory.
 ```
 
 ### オプショナル解決（tryResolve）
