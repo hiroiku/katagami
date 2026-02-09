@@ -12,21 +12,21 @@
 
 ## 特徴
 
-| 機能                     | 説明                                                                                                              |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| ゼロ依存                 | デコレータ不要、reflect-metadata 不要、ポリフィル不要 — どのバンドラーでもそのまま動作                            |
-| 完全な型推論             | メソッドチェーンで型が蓄積され、未登録トークンの解決はコンパイル時エラーになる                                    |
-| Tree Shaking 対応        | サブパスエクスポート（`katagami/scope`、`katagami/disposable`）と `sideEffects: false` で最小バンドルサイズを実現 |
-| キャプティブ依存の防止   | Singleton/Transient のファクトリから Scoped トークンへのアクセスをコンパイル時およびスコープ内のランタイムで防止  |
-| ハイブリッドトークン戦略 | クラストークンで厳密な型安全性、PropertyKey トークンで柔軟性                                                      |
-| インターフェース型マップ | `createContainer<T>()` にインターフェースを渡して登録順序非依存に                                                 |
-| 3 つのライフタイム       | Singleton、Transient、Scoped（子コンテナ対応）                                                                    |
-| Disposable サポート      | TC39 Explicit Resource Management（`Symbol.dispose` / `Symbol.asyncDispose` / `await using`）                     |
-| モジュール合成           | `use()` によるコンテナの合成で登録をグループ化・再利用                                                            |
-| 非同期ファクトリ         | Promise を返すファクトリは型システムが自動的に追跡                                                                |
-| 循環依存の検出           | 循環パスの全体を含む明確なエラーメッセージ                                                                        |
-| オプショナル解決         | `tryResolve` は未登録トークンでスローせず `undefined` を返す                                                      |
-| 遅延解決                 | `katagami/lazy` の `lazy()` による Proxy ベースの遅延インスタンス生成。最初のアクセス時に生成                     |
+| 機能                     | 説明                                                                                                             |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| ゼロ依存                 | デコレータ不要、reflect-metadata 不要、ポリフィル不要 — どのバンドラーでもそのまま動作                           |
+| 完全な型推論             | メソッドチェーンで型が蓄積され、未登録トークンの解決はコンパイル時エラーになる                                   |
+| Tree Shaking 対応        | サブパスエクスポート（`katagami/disposable`、`katagami/lazy`）と `sideEffects: false` で最小バンドルサイズを実現 |
+| キャプティブ依存の防止   | Singleton/Transient のファクトリから Scoped トークンへのアクセスをコンパイル時およびスコープ内のランタイムで防止 |
+| ハイブリッドトークン戦略 | クラストークンで厳密な型安全性、PropertyKey トークンで柔軟性                                                     |
+| インターフェース型マップ | `createContainer<T>()` にインターフェースを渡して登録順序非依存に                                                |
+| 3 つのライフタイム       | Singleton、Transient、Scoped（子コンテナ対応）                                                                   |
+| Disposable サポート      | TC39 Explicit Resource Management（`Symbol.dispose` / `Symbol.asyncDispose` / `await using`）                    |
+| モジュール合成           | `use()` によるコンテナの合成で登録をグループ化・再利用                                                           |
+| 非同期ファクトリ         | Promise を返すファクトリは型システムが自動的に追跡                                                               |
+| 循環依存の検出           | 循環パスの全体を含む明確なエラーメッセージ                                                                       |
+| オプショナル解決         | `tryResolve` は未登録トークンでスローせず `undefined` を返す                                                     |
+| 遅延解決                 | `katagami/lazy` の `lazy()` による Proxy ベースの遅延インスタンス生成。最初のアクセス時に生成                    |
 
 ## インストール
 
@@ -37,7 +37,7 @@ npm install katagami
 ## クイックスタート
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Logger {
 	log(msg: string) {
@@ -56,7 +56,7 @@ const container = createContainer()
 	.registerSingleton(Logger, () => new Logger())
 	.registerSingleton(UserService, r => new UserService(r.resolve(Logger)));
 
-const userService = container.resolve(UserService);
+const userService = createScope(container).resolve(UserService);
 //    ^? UserService（完全に推論される）
 userService.greet('world');
 ```
@@ -94,14 +94,13 @@ userService.greet('world');
 
 ### Tree Shaking 対応
 
-Katagami はサブパスエクスポートで機能を分割しています。必要なものだけをインポートすれば、`katagami/scope`、`katagami/disposable`、`katagami/lazy` は未使用時にバンドルから完全に除外されます。`sideEffects: false` との組み合わせにより、バンドラーが未使用コードを確実に除去できます。
+Katagami はサブパスエクスポートで機能を分割しています。必要なものだけをインポートすれば、`katagami/disposable`、`katagami/lazy` は未使用時にバンドルから完全に除外されます。`sideEffects: false` との組み合わせにより、バンドラーが未使用コードを確実に除去できます。
 
 ```ts
-// コアのみ — scope、disposable、lazy はバンドルに含まれない
-import { createContainer } from 'katagami';
+// コアのみ — disposable、lazy はバンドルに含まれない
+import { createContainer, createScope } from 'katagami';
 
 // 必要なものだけをインポート
-import { createScope } from 'katagami/scope';
 import { disposable } from 'katagami/disposable';
 import { lazy } from 'katagami/lazy';
 ```
@@ -129,7 +128,7 @@ import { lazy } from 'katagami/lazy';
 Singleton は最初の `resolve` でインスタンスを作成しキャッシュします。Transient は毎回新しいインスタンスを作成します。
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Database {
 	constructor(public id = Math.random()) {}
@@ -143,20 +142,21 @@ const container = createContainer()
 	.registerSingleton(Database, () => new Database())
 	.registerTransient(RequestHandler, () => new RequestHandler());
 
+const scope = createScope(container);
+
 // Singleton — 常に同じインスタンス
-container.resolve(Database) === container.resolve(Database); // true
+scope.resolve(Database) === scope.resolve(Database); // true
 
 // Transient — 毎回新しいインスタンス
-container.resolve(RequestHandler) === container.resolve(RequestHandler); // false
+scope.resolve(RequestHandler) === scope.resolve(RequestHandler); // false
 ```
 
 ### Scoped ライフタイムと子コンテナ
 
-Scoped 登録はスコープ内では Singleton のように振る舞いますが、新しいスコープでは新しいインスタンスを生成します。`katagami/scope` から `createScope` をインポートして子コンテナを作成します。Scoped トークンはルートコンテナからは解決できません。
+Scoped 登録はスコープ内では Singleton のように振る舞いますが、新しいスコープでは新しいインスタンスを生成します。`createScope` を使って子コンテナを作成します。Scoped トークンはルートコンテナからは解決できません。
 
 ```ts
-import { createContainer } from 'katagami';
-import { createScope } from 'katagami/scope';
+import { createContainer, createScope } from 'katagami';
 
 class DbPool {
 	constructor(public name = 'main') {}
@@ -247,7 +247,7 @@ const container = createContainer().use(appModule);
 `Promise` を返すファクトリは型システムによって自動的に追跡されます。非同期トークンを `resolve` すると、戻り値の型は `V` ではなく `Promise<V>` になります：
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Database {
 	constructor(public connected: boolean) {}
@@ -266,10 +266,12 @@ const container = createContainer()
 		return new Database(true);
 	});
 
-const logger = container.resolve(Logger);
+const scope = createScope(container);
+
+const logger = scope.resolve(Logger);
 //    ^? Logger
 
-const db = await container.resolve(Database);
+const db = await scope.resolve(Database);
 //    ^? Promise<Database>（await 後 → Database）
 db.connected; // true
 ```
@@ -291,7 +293,7 @@ const container = createContainer()
 Katagami は解決中のトークンを追跡します。循環依存が検出されると、循環パスの全体を含む `ContainerError` がスローされます：
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class ServiceA {
 	constructor(public b: ServiceB) {}
@@ -305,7 +307,7 @@ const container = createContainer()
 	.registerSingleton(ServiceA, r => new ServiceA(r.resolve(ServiceB)))
 	.registerSingleton(ServiceB, r => new ServiceB(r.resolve(ServiceA)));
 
-container.resolve(ServiceA);
+createScope(container).resolve(ServiceA);
 // ContainerError: Circular dependency detected: ServiceA -> ServiceB -> ServiceA
 ```
 
@@ -320,7 +322,7 @@ ContainerError: Circular dependency detected: ServiceX -> ServiceY -> ServiceZ -
 破棄機能は `katagami/disposable` の `disposable()` ラッパーによって提供されます。コンテナまたはスコープをラップすると `[Symbol.asyncDispose]` が付与され、`await using` 構文が使用可能になります。破棄時に、管理対象のインスタンスを生成の逆順（LIFO）で走査し、`[Symbol.asyncDispose]()` または `[Symbol.dispose]()` メソッドを自動的に呼び出します。
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 import { disposable } from 'katagami/disposable';
 
 class Connection {
@@ -330,17 +332,18 @@ class Connection {
 }
 
 // 手動で破棄
-const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
+const container = createContainer().registerSingleton(Connection, () => new Connection());
+const dc = disposable(container);
 
-container.resolve(Connection);
-await container[Symbol.asyncDispose]();
+createScope(container).resolve(Connection);
+await dc[Symbol.asyncDispose]();
 // => "Connection closed"
 ```
 
 `await using` を使うと、ブロックの終了時にスコープが自動的に破棄されます：
 
 ```ts
-import { createScope } from 'katagami/scope';
+import { createContainer, createScope } from 'katagami';
 import { disposable } from 'katagami/disposable';
 
 const root = createContainer()
@@ -359,10 +362,9 @@ const root = createContainer()
 `disposable()` ラッパーは戻り型も絞り込み、登録メソッド（`registerSingleton`、`registerTransient`、`registerScoped`、`use`）を型レベルで除去します。これにより、破棄される可能性のあるコンテナへの誤った登録を防止できます：
 
 ```ts
-const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
+const dc = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
 
-container.resolve(Connection); // OK
-container.registerSingleton(/* ... */); // コンパイル時エラー
+dc.registerSingleton(/* ... */); // コンパイル時エラー
 ```
 
 ### 遅延解決（Lazy Resolution）
@@ -370,7 +372,7 @@ container.registerSingleton(/* ... */); // コンパイル時エラー
 `katagami/lazy` の `lazy()` 関数は、最初のプロパティアクセスまでインスタンスの生成を遅延するプロキシを作成します。起動時間の最適化や循環依存の回避に有効です。
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 import { lazy } from 'katagami/lazy';
 
 class HeavyService {
@@ -384,7 +386,9 @@ class HeavyService {
 
 const container = createContainer().registerSingleton(HeavyService, () => new HeavyService());
 
-const service = lazy(container, HeavyService);
+const scope = createScope(container);
+
+const service = lazy(scope, HeavyService);
 // HeavyService はまだインスタンス化されていない
 
 service.process(); // ここで初めてインスタンスが生成・キャッシュされる
@@ -395,11 +399,9 @@ service.process(); // キャッシュされたインスタンスを使用
 
 **sync クラストークンのみ対応**です。Proxy トラップは同期的なため、非同期トークンや PropertyKey トークンは型レベルで拒否されます。
 
-`lazy()` は Container、Scope、DisposableContainer、DisposableScope のすべてに対応しています：
+`lazy()` は Scope、DisposableScope に対応しています：
 
 ```ts
-import { createScope } from 'katagami/scope';
-
 const root = createContainer().registerScoped(RequestContext, () => new RequestContext());
 const scope = createScope(root);
 
@@ -408,14 +410,13 @@ const ctx = lazy(scope, RequestContext); // 遅延された Scoped 解決
 
 ### Tree Shaking
 
-Katagami はサブパスエクスポートを使用して、機能を独立したエントリポイントに分割しています。コアコンテナのみが必要な場合、`katagami/scope`、`katagami/disposable`、`katagami/lazy` はバンドルから完全に除外されます。パッケージは `sideEffects: false` を宣言しているため、バンドラーは未使用コードを安全に除去できます。
+Katagami はサブパスエクスポートを使用して、機能を独立したエントリポイントに分割しています。コアコンテナのみが必要な場合、`katagami/disposable`、`katagami/lazy` はバンドルから完全に除外されます。パッケージは `sideEffects: false` を宣言しているため、バンドラーは未使用コードを安全に除去できます。
 
 ```ts
-// コアのみ — scope、disposable、lazy はバンドルに含まれない
-import { createContainer } from 'katagami';
+// コアのみ — disposable、lazy はバンドルに含まれない
+import { createContainer, createScope } from 'katagami';
 
 // 必要なものだけをインポート
-import { createScope } from 'katagami/scope';
 import { disposable } from 'katagami/disposable';
 import { lazy } from 'katagami/lazy';
 ```
@@ -425,7 +426,7 @@ import { lazy } from 'katagami/lazy';
 `createContainer<T>()` にインターフェースを渡すと、PropertyKey トークンはチェーンによる蓄積ではなく、インターフェースから型が決定されます。これにより、トークンを任意の順序で登録・解決できます：
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Logger {
 	log(msg: string) {
@@ -446,7 +447,7 @@ const container = createContainer<Services>()
 	})
 	.registerSingleton('logger', () => new Logger());
 
-const greeting = container.resolve('greeting');
+const greeting = createScope(container).resolve('greeting');
 //    ^? string
 ```
 
@@ -494,8 +495,7 @@ const container = createContainer()
 Katagami はこのルールをスコープ内のランタイムでも適用します。Singleton のファクトリが Scoped トークンを直接的または間接的に解決しようとすると、`ContainerError` がスローされます：
 
 ```ts
-import { createContainer } from 'katagami';
-import { createScope } from 'katagami/scope';
+import { createContainer, createScope } from 'katagami';
 
 class DbPool {}
 class RequestContext {}
@@ -514,7 +514,7 @@ scope.resolve(DbPool);
 オプショナル依存を扱いたい場合や、エラーをスローせずにトークンが登録されているかを確認したい場合は、`tryResolve` を使用します。`resolve` と異なり、未登録トークンで `ContainerError` をスローする代わりに `undefined` を返します：
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Logger {
 	log(msg: string) {
@@ -530,11 +530,13 @@ class Analytics {
 
 const container = createContainer().registerSingleton(Logger, () => new Logger());
 
+const scope = createScope(container);
+
 // resolve は未登録トークンでスロー
-container.resolve(Analytics); // ContainerError: Token "Analytics" is not registered.
+scope.resolve(Analytics); // ContainerError: Token "Analytics" is not registered.
 
 // tryResolve は未登録トークンで undefined を返す
-const analytics = container.tryResolve(Analytics);
+const analytics = scope.tryResolve(Analytics);
 //    ^? Analytics | undefined
 if (analytics) {
 	analytics.track('event');
@@ -583,15 +585,7 @@ const container = createContainer()
 
 `source`（別の `Container`）の全登録をこのコンテナにコピーします。ファクトリとライフタイムのエントリのみがコピーされ、シングルトンインスタンスのキャッシュは共有されません。メソッドチェーン用にコンテナを返します。
 
-### `Container.prototype.resolve(token)`
-
-指定されたトークンのインスタンスを解決して返します。トークンが未登録の場合、または循環依存が検出された場合に `ContainerError` をスローします。
-
-### `Container.prototype.tryResolve(token)`
-
-指定されたトークンのインスタンスの解決を試みます。トークンが未登録の場合、スローせず `undefined` を返します。循環依存や破棄済みコンテナ/スコープの操作では従来通り `ContainerError` をスローします。
-
-### `createScope(source)` — `katagami/scope`
+### `createScope(source)`
 
 `Container` または既存の `Scope` から新しい `Scope`（子コンテナ）を作成します。
 
@@ -601,7 +595,7 @@ const container = createContainer()
 
 ### `Scope.prototype.resolve(token)`
 
-指定されたトークンのインスタンスを解決して返します。`Container.prototype.resolve` と同様に動作しますが、Scoped トークンも解決できます。
+指定されたトークンのインスタンスを解決して返します。トークンが未登録の場合、または循環依存が検出された場合に `ContainerError` をスローします。Scoped トークンも解決できます。
 
 ### `Scope.prototype.tryResolve(token)`
 
@@ -609,11 +603,11 @@ const container = createContainer()
 
 ### `lazy(source, token)` — `katagami/lazy`
 
-`resolve()` を最初のプロパティアクセスまで遅延する Proxy を作成します。解決されたインスタンスはキャッシュされ、以降のアクセスではキャッシュが使用されます。sync クラストークンのみ対応。非同期トークンおよび PropertyKey トークンは型レベルで拒否されます。`Container`、`Scope`、`DisposableContainer`、`DisposableScope` で動作します。
+`resolve()` を最初のプロパティアクセスまで遅延する Proxy を作成します。解決されたインスタンスはキャッシュされ、以降のアクセスではキャッシュが使用されます。sync クラストークンのみ対応。非同期トークンおよび PropertyKey トークンは型レベルで拒否されます。`Scope`、`DisposableScope` で動作します。
 
 ### `disposable(container)` — `katagami/disposable`
 
-`Container` または `Scope` に `[Symbol.asyncDispose]` を付与し、`await using` 構文を使用可能にします。管理対象のインスタンスを逆順（LIFO）で破棄します。各インスタンスの `[Symbol.asyncDispose]()` または `[Symbol.dispose]()` を呼び出します。冪等 — 2 回目以降の呼び出しは何もしません。破棄後は `resolve()` が `ContainerError` をスローします。戻り型は `DisposableContainer` または `DisposableScope` に絞り込まれ、`resolve` と `tryResolve` のみが公開されます — 登録メソッドは型レベルで除去されます。
+`Container` または `Scope` に `[Symbol.asyncDispose]` を付与し、`await using` 構文を使用可能にします。管理対象のインスタンスを逆順（LIFO）で破棄します。各インスタンスの `[Symbol.asyncDispose]()` または `[Symbol.dispose]()` を呼び出します。冪等 — 2 回目以降の呼び出しは何もしません。破棄後は `resolve()` が `ContainerError` をスローします。戻り型は `DisposableContainer` または `DisposableScope` に絞り込まれます。`DisposableContainer` は破棄機能のみを公開し、登録メソッドと解決メソッドは除去されます。`DisposableScope` は `resolve`、`tryResolve`、`resolveAll`、`tryResolveAll` を保持します。
 
 ### `class ContainerError`
 

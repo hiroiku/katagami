@@ -1,6 +1,6 @@
 {
 	"name": "katagami",
-	"version": "2.3.0",
+	"version": "3.0.0",
 	"description": "Lightweight DI container for TypeScript and JavaScript — full type inference, no decorators, no reflect-metadata, hybrid class & PropertyKey tokens.",
 	"license": "MIT",
 	"type": "module",
@@ -10,11 +10,6 @@
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",
 			"require": "./dist/index.cjs"
-		},
-		"./scope": {
-			"types": "./dist/scope/index.d.ts",
-			"import": "./dist/scope/index.js",
-			"require": "./dist/scope/index.cjs"
 		},
 		"./disposable": {
 			"types": "./dist/disposable/index.d.ts",
@@ -50,8 +45,8 @@
 		"clean": "rm -rf dist",
 		"build": "bun run clean && bun run build:types && bun run build:esm && bun run build:cjs",
 		"build:types": "tsc -p tsconfig.build.json",
-		"build:esm": "bun build ./src/index.ts ./src/scope/index.ts ./src/disposable/index.ts ./src/lazy/index.ts --outdir dist --format esm --splitting",
-		"build:cjs": "bun build ./src/index.ts --outfile dist/index.cjs --format cjs && bun build ./src/scope/index.ts --outfile dist/scope/index.cjs --format cjs && bun build ./src/disposable/index.ts --outfile dist/disposable/index.cjs --format cjs && bun build ./src/lazy/index.ts --outfile dist/lazy/index.cjs --format cjs",
+		"build:esm": "bun build ./src/index.ts ./src/disposable/index.ts ./src/lazy/index.ts --outdir dist --format esm --splitting",
+		"build:cjs": "bun build ./src/index.ts --outfile dist/index.cjs --format cjs && bun build ./src/disposable/index.ts --outfile dist/disposable/index.cjs --format cjs && bun build ./src/lazy/index.ts --outfile dist/lazy/index.cjs --format cjs",
 		"prepublishOnly": "bun run build",
 		"check": "bun run format",
 		"lint": "biome lint .",

@@ -27,7 +27,8 @@ describe('use', () => {
 	test('copies singleton registrations from source container', () => {
 		const module = createContainer().registerSingleton(ServiceA, () => new ServiceA());
 		const container = createContainer().use(module);
-		const instance = container.resolve(ServiceA);
+		const scope = createScope(container);
+		const instance = scope.resolve(ServiceA);
 		expect(instance).toBeInstanceOf(ServiceA);
 		expect(instance.value).toBe('A');
 	});
@@ -35,8 +36,9 @@ describe('use', () => {
 	test('copies transient registrations from source container', () => {
 		const module = createContainer().registerTransient(ServiceA, () => new ServiceA());
 		const container = createContainer().use(module);
-		const a = container.resolve(ServiceA);
-		const b = container.resolve(ServiceA);
+		const scope = createScope(container);
+		const a = scope.resolve(ServiceA);
+		const b = scope.resolve(ServiceA);
 		expect(a).toBeInstanceOf(ServiceA);
 		expect(a).not.toBe(b);
 	});
@@ -51,10 +53,10 @@ describe('use', () => {
 
 	test('does not share singleton instance cache with source container', () => {
 		const module = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const resolved = module.resolve(ServiceA);
+		const resolved = createScope(module).resolve(ServiceA);
 
 		const container = createContainer().use(module);
-		const instance = container.resolve(ServiceA);
+		const instance = createScope(container).resolve(ServiceA);
 
 		expect(resolved).toBeInstanceOf(ServiceA);
 		expect(instance).toBeInstanceOf(ServiceA);
@@ -67,7 +69,8 @@ describe('use', () => {
 			.use(module)
 			.registerSingleton(ServiceB, r => new ServiceB(r.resolve(ServiceA)));
 
-		const b = container.resolve(ServiceB);
+		const scope = createScope(container);
+		const b = scope.resolve(ServiceB);
 		expect(b).toBeInstanceOf(ServiceB);
 		expect(b.a).toBeInstanceOf(ServiceA);
 	});
@@ -77,9 +80,10 @@ describe('use', () => {
 		const moduleC = createContainer().registerSingleton(ServiceC, () => new ServiceC());
 
 		const container = createContainer().use(moduleA).use(moduleC);
+		const scope = createScope(container);
 
-		expect(container.resolve(ServiceA)).toBeInstanceOf(ServiceA);
-		expect(container.resolve(ServiceC)).toBeInstanceOf(ServiceC);
+		expect(scope.resolve(ServiceA)).toBeInstanceOf(ServiceA);
+		expect(scope.resolve(ServiceC)).toBeInstanceOf(ServiceC);
 	});
 
 	test('supports module composition — module using another module', () => {
@@ -91,7 +95,8 @@ describe('use', () => {
 
 		const container = createContainer().use(appModule);
 
-		const b = container.resolve(ServiceB);
+		const scope = createScope(container);
+		const b = scope.resolve(ServiceB);
 		expect(b).toBeInstanceOf(ServiceB);
 		expect(b.a).toBeInstanceOf(ServiceA);
 	});
@@ -103,9 +108,10 @@ describe('use', () => {
 			.registerSingleton(ServiceB, r => new ServiceB(r.resolve(ServiceA)))
 			.registerTransient(ServiceC, () => new ServiceC());
 
-		expect(container.resolve(ServiceA)).toBeInstanceOf(ServiceA);
-		expect(container.resolve(ServiceB)).toBeInstanceOf(ServiceB);
-		expect(container.resolve(ServiceC)).toBeInstanceOf(ServiceC);
+		const scope = createScope(container);
+		expect(scope.resolve(ServiceA)).toBeInstanceOf(ServiceA);
+		expect(scope.resolve(ServiceB)).toBeInstanceOf(ServiceB);
+		expect(scope.resolve(ServiceC)).toBeInstanceOf(ServiceC);
 	});
 
 	test('works with PropertyKey tokens', () => {
@@ -114,24 +120,27 @@ describe('use', () => {
 			.registerSingleton('count', () => 42);
 
 		const container = createContainer().use(module);
+		const scope = createScope(container);
 
-		expect(container.resolve('greeting')).toBe('hello');
-		expect(container.resolve('count')).toBe(42);
+		expect(scope.resolve('greeting')).toBe('hello');
+		expect(scope.resolve('count')).toBe(42);
 	});
 
 	test('works with Symbol tokens', () => {
 		const token = Symbol('test');
 		const module = createContainer().registerSingleton(token, () => 'symbol-value');
 		const container = createContainer().use(module);
+		const scope = createScope(container);
 
-		expect(container.resolve(token)).toBe('symbol-value');
+		expect(scope.resolve(token)).toBe('symbol-value');
 	});
 
 	test('works with async factories', async () => {
 		const module = createContainer().registerSingleton(AsyncService, async () => new AsyncService('async'));
 
 		const container = createContainer().use(module);
-		const instance = await container.resolve(AsyncService);
+		const scope = createScope(container);
+		const instance = await scope.resolve(AsyncService);
 		expect(instance).toBeInstanceOf(AsyncService);
 		expect(instance.value).toBe('async');
 	});
@@ -141,7 +150,8 @@ describe('use', () => {
 		const moduleB = createContainer().registerSingleton(ServiceA, () => new ServiceA('second'));
 
 		const container = createContainer().use(moduleA).use(moduleB);
-		expect(container.resolve(ServiceA).value).toBe('second');
+		const scope = createScope(container);
+		expect(scope.resolve(ServiceA).value).toBe('second');
 	});
 
 	test('scoped tokens from module are resolvable via createScope', () => {
@@ -167,7 +177,8 @@ describe('use', () => {
 			.registerSingleton(ServiceA, () => new ServiceA())
 			.use(empty);
 
-		expect(container.resolve(ServiceA)).toBeInstanceOf(ServiceA);
+		const scope = createScope(container);
+		expect(scope.resolve(ServiceA)).toBeInstanceOf(ServiceA);
 	});
 
 	test('use copies registrations from a disposed container (no disposed check on source)', async () => {
@@ -179,7 +190,8 @@ describe('use', () => {
 
 		// use() only iterates over registrations map — it does not check disposed state
 		const container = createContainer().use(module);
-		const instance = container.resolve(ServiceA);
+		const scope = createScope(container);
+		const instance = scope.resolve(ServiceA);
 		expect(instance).toBeInstanceOf(ServiceA);
 	});
 });

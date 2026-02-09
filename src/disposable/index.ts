@@ -6,9 +6,9 @@ import type { Scope } from '../scope';
 /**
  * A container wrapped with `disposable()`.
  *
- * Only `resolve`, `tryResolve`, `resolveAll`, and `tryResolveAll` are available at the type level.
  * Registration methods (`registerSingleton`, `registerTransient`, `registerScoped`, `use`)
  * are excluded, preventing accidental registration on a potentially-disposed container.
+ * Use `createScope()` to create a scope for resolution.
  *
  * @template T PropertyKey-based token type map
  * @template Sync Union of registered sync class constructors
@@ -18,14 +18,13 @@ import type { Scope } from '../scope';
  * @template ScopedAsync Union of scoped async class constructors
  */
 export interface DisposableContainer<
-	T = Record<never, never>,
-	Sync extends AbstractConstructor = never,
-	Async extends AbstractConstructor = never,
+	_T = Record<never, never>,
+	_Sync extends AbstractConstructor = never,
+	_Async extends AbstractConstructor = never,
 	_ScopedT = Record<never, never>,
 	_ScopedSync extends AbstractConstructor = never,
 	_ScopedAsync extends AbstractConstructor = never,
-> extends Resolver<T, Sync, Async>,
-		AsyncDisposable {
+> extends AsyncDisposable {
 	readonly [INTERNALS]: ContainerInternals;
 }
 
@@ -60,8 +59,8 @@ export interface DisposableScope<
  * Disposes owned instances in reverse creation order (LIFO), calling
  * `[Symbol.asyncDispose]()` or `[Symbol.dispose]()` on each instance that implements them.
  *
- * The returned type is narrowed to only expose `resolve`, `tryResolve`, `resolveAll`, and `tryResolveAll`,
- * preventing registration methods from being called on a potentially-disposed container.
+ * The returned type prevents registration methods from being called on a potentially-disposed container.
+ * For scopes, `resolve`, `tryResolve`, `resolveAll`, and `tryResolveAll` remain available.
  *
  * @param container A Container or Scope to make disposable
  * @returns The same object with `AsyncDisposable` capability added and registration methods removed from the type

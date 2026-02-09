@@ -349,7 +349,8 @@ describe('parent scope disposal effect on child scope', () => {
 		// Resolve singleton through child — goes into shared singletonInstances
 		const childSingleton = childScope.resolve(ServiceA);
 		const parentSingleton = parentScope.resolve(ServiceA);
-		const rootSingleton = container.resolve(ServiceA);
+		const rootScope = createScope(container);
+		const rootSingleton = rootScope.resolve(ServiceA);
 
 		expect(childSingleton).toBe(parentSingleton);
 		expect(childSingleton).toBe(rootSingleton);

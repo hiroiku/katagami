@@ -46,7 +46,7 @@ describe('lazy — basic behavior', () => {
 			return new ServiceA();
 		});
 
-		const proxy = lazy(container, ServiceA);
+		const proxy = lazy(createScope(container), ServiceA);
 		expect(factoryCalled).toBe(false);
 
 		// Trigger resolution
@@ -58,7 +58,7 @@ describe('lazy — basic behavior', () => {
 		CountingService.count = 0;
 		const container = createContainer().registerSingleton(CountingService, () => new CountingService());
 
-		const proxy = lazy(container, CountingService);
+		const proxy = lazy(createScope(container), CountingService);
 		// Access multiple times
 		void (proxy as unknown as Record<string, unknown>).constructor;
 		void (proxy as unknown as Record<string, unknown>).constructor;
@@ -69,21 +69,21 @@ describe('lazy — basic behavior', () => {
 
 	test('reads properties from resolved instance', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA('hello'));
-		const proxy = lazy(container, ServiceA);
+		const proxy = lazy(createScope(container), ServiceA);
 
 		expect(proxy.value).toBe('hello');
 	});
 
 	test('calls methods with correct this binding', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA('bound'));
-		const proxy = lazy(container, ServiceA);
+		const proxy = lazy(createScope(container), ServiceA);
 
 		expect(proxy.getValue()).toBe('bound');
 	});
 
 	test('method reference retains this binding', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA('ref'));
-		const proxy = lazy(container, ServiceA);
+		const proxy = lazy(createScope(container), ServiceA);
 
 		const fn = proxy.getValue;
 		expect(fn()).toBe('ref');
@@ -97,9 +97,10 @@ describe('lazy — basic behavior', () => {
 describe('lazy — lifetimes', () => {
 	test('singleton shares instance across direct and lazy resolve', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
+		const scope = createScope(container);
 
-		const direct = container.resolve(ServiceA);
-		const proxy = lazy(container, ServiceA);
+		const direct = scope.resolve(ServiceA);
+		const proxy = lazy(scope, ServiceA);
 
 		expect(proxy.value).toBe(direct.value);
 		// They should be the same singleton instance
@@ -110,8 +111,8 @@ describe('lazy — lifetimes', () => {
 	test('transient creates independent instance per lazy proxy', () => {
 		const container = createContainer().registerTransient(ServiceA, () => new ServiceA());
 
-		const proxy1 = lazy(container, ServiceA);
-		const proxy2 = lazy(container, ServiceA);
+		const proxy1 = lazy(createScope(container), ServiceA);
+		const proxy2 = lazy(createScope(container), ServiceA);
 
 		proxy1.value = 'first';
 		expect(proxy2.value).toBe('A'); // independent default
@@ -137,7 +138,7 @@ describe('lazy — error propagation', () => {
 	test('throws on first access for unregistered token', () => {
 		const container = createContainer();
 
-		const proxy = lazy(container as never as { resolve(token: unknown): unknown }, ServiceA);
+		const proxy = lazy(createScope(container) as never as { resolve(token: unknown): unknown }, ServiceA);
 
 		expect(() => (proxy as ServiceA).value).toThrow(ContainerError);
 	});
@@ -151,7 +152,7 @@ describe('lazy — error propagation', () => {
 			return new ServiceA('recovered');
 		});
 
-		const proxy = lazy(container, ServiceA);
+		const proxy = lazy(createScope(container), ServiceA);
 
 		// First access fails
 		expect(() => proxy.value).toThrow('temporary failure');
@@ -164,11 +165,12 @@ describe('lazy — error propagation', () => {
 	});
 
 	test('throws on access after container disposal', async () => {
-		const container = disposable(createContainer().registerSingleton(ServiceA, () => new ServiceA()));
+		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
+		const scope = disposable(createScope(container));
 
-		const proxy = lazy(container, ServiceA);
+		const proxy = lazy(scope, ServiceA);
 
-		await container[Symbol.asyncDispose]();
+		await scope[Symbol.asyncDispose]();
 
 		expect(() => proxy.value).toThrow(ContainerError);
 	});
@@ -181,14 +183,14 @@ describe('lazy — error propagation', () => {
 describe('lazy — proxy transparency', () => {
 	test('getPrototypeOf returns correct prototype', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const proxy = lazy(container, ServiceA);
+		const proxy = lazy(createScope(container), ServiceA);
 
 		expect(Object.getPrototypeOf(proxy)).toBe(ServiceA.prototype);
 	});
 
 	test('has operator works', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const proxy = lazy(container, ServiceA);
+		const proxy = lazy(createScope(container), ServiceA);
 
 		expect('value' in proxy).toBe(true);
 		expect('nonexistent' in proxy).toBe(false);
@@ -196,23 +198,24 @@ describe('lazy — proxy transparency', () => {
 
 	test('ownKeys returns instance keys', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const proxy = lazy(container, ServiceA);
+		const proxy = lazy(createScope(container), ServiceA);
 
 		expect(Object.keys(proxy)).toEqual(['value']);
 	});
 
 	test('set writes to real instance', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const proxy = lazy(container, ServiceA);
+		const scope = createScope(container);
+		const proxy = lazy(scope, ServiceA);
 
 		proxy.value = 'updated';
 		expect(proxy.value).toBe('updated');
-		expect(container.resolve(ServiceA).value).toBe('updated');
+		expect(scope.resolve(ServiceA).value).toBe('updated');
 	});
 
 	test('getOwnPropertyDescriptor works', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const proxy = lazy(container, ServiceA);
+		const proxy = lazy(createScope(container), ServiceA);
 
 		const desc = Object.getOwnPropertyDescriptor(proxy, 'value');
 		expect(desc).toBeDefined();
@@ -221,15 +224,16 @@ describe('lazy — proxy transparency', () => {
 
 	test('defineProperty works', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const proxy = lazy(container, ServiceA);
+		const scope = createScope(container);
+		const proxy = lazy(scope, ServiceA);
 
 		Object.defineProperty(proxy, 'extra', { configurable: true, value: 123 });
-		expect((container.resolve(ServiceA) as unknown as Record<string, unknown>).extra).toBe(123);
+		expect((scope.resolve(ServiceA) as unknown as Record<string, unknown>).extra).toBe(123);
 	});
 
 	test('deleteProperty works', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const proxy = lazy(container, ServiceA);
+		const proxy = lazy(createScope(container), ServiceA);
 
 		// Trigger resolution then delete
 		expect(proxy.value).toBe('A');
@@ -239,14 +243,14 @@ describe('lazy — proxy transparency', () => {
 
 	test('isExtensible works', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const proxy = lazy(container, ServiceA);
+		const proxy = lazy(createScope(container), ServiceA);
 
 		expect(Object.isExtensible(proxy)).toBe(true);
 	});
 
 	test('preventExtensions works', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const proxy = lazy(container, ServiceA);
+		const proxy = lazy(createScope(container), ServiceA);
 
 		Object.preventExtensions(proxy);
 		expect(Object.isExtensible(proxy)).toBe(false);
@@ -254,7 +258,7 @@ describe('lazy — proxy transparency', () => {
 
 	test('setPrototypeOf works', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const proxy = lazy(container, ServiceA);
+		const proxy = lazy(createScope(container), ServiceA);
 
 		const proto = { custom: true };
 		Object.setPrototypeOf(proxy, proto);
@@ -263,7 +267,7 @@ describe('lazy — proxy transparency', () => {
 
 	test('getter/setter work through proxy', () => {
 		const container = createContainer().registerSingleton(WithGetter, () => new WithGetter());
-		const proxy = lazy(container, WithGetter);
+		const proxy = lazy(createScope(container), WithGetter);
 
 		expect(proxy.secret).toBe(42);
 		proxy.secret = 99;
@@ -279,7 +283,7 @@ describe('lazy — disposable integration', () => {
 	test('works with DisposableContainer', () => {
 		const container = disposable(createContainer().registerSingleton(ServiceA, () => new ServiceA('disposable')));
 
-		const proxy = lazy(container, ServiceA);
+		const proxy = lazy(createScope(container), ServiceA);
 		expect(proxy.value).toBe('disposable');
 	});
 

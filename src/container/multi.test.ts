@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { ContainerError } from '../error';
+import { createScope } from '../scope';
 import { createContainer } from '.';
 
 // Helper classes for testing
@@ -21,7 +22,7 @@ describe('resolveAll (singleton)', () => {
 			.registerSingleton(Handler, () => new Handler('log'))
 			.registerSingleton(Handler, () => new Handler('metrics'));
 
-		const handlers = container.resolveAll(Handler);
+		const handlers = createScope(container).resolveAll(Handler);
 		expect(handlers).toHaveLength(2);
 		expect(handlers[0].name).toBe('log');
 		expect(handlers[1].name).toBe('metrics');
@@ -32,15 +33,16 @@ describe('resolveAll (singleton)', () => {
 			.registerSingleton(Handler, () => new Handler('log'))
 			.registerSingleton(Handler, () => new Handler('metrics'));
 
-		const first = container.resolveAll(Handler);
-		const second = container.resolveAll(Handler);
+		const scope = createScope(container);
+		const first = scope.resolveAll(Handler);
+		const second = scope.resolveAll(Handler);
 		expect(first[0]).toBe(second[0]);
 		expect(first[1]).toBe(second[1]);
 	});
 
 	test('returns a single-element array for a single registration', () => {
 		const container = createContainer().registerSingleton(Handler, () => new Handler('only'));
-		const handlers = container.resolveAll(Handler);
+		const handlers = createScope(container).resolveAll(Handler);
 		expect(handlers).toHaveLength(1);
 		expect(handlers[0].name).toBe('only');
 	});
@@ -51,7 +53,7 @@ describe('resolveAll (singleton)', () => {
 			.registerSingleton(Handler, () => new Handler('second'))
 			.registerSingleton(Handler, () => new Handler('third'));
 
-		expect(container.resolve(Handler).name).toBe('third');
+		expect(createScope(container).resolve(Handler).name).toBe('third');
 	});
 
 	test('resolve and resolveAll share singleton cache for the last registration', () => {
@@ -59,8 +61,9 @@ describe('resolveAll (singleton)', () => {
 			.registerSingleton(Handler, () => new Handler('first'))
 			.registerSingleton(Handler, () => new Handler('second'));
 
-		const resolved = container.resolve(Handler);
-		const all = container.resolveAll(Handler);
+		const scope = createScope(container);
+		const resolved = scope.resolve(Handler);
+		const all = scope.resolveAll(Handler);
 
 		// The last registration's instance should be the same object
 		expect(all[1]).toBe(resolved);
@@ -71,8 +74,9 @@ describe('resolveAll (singleton)', () => {
 			.registerSingleton(Handler, () => new Handler('first'))
 			.registerSingleton(Handler, () => new Handler('second'));
 
-		const all = container.resolveAll(Handler);
-		const resolved = container.resolve(Handler);
+		const scope = createScope(container);
+		const all = scope.resolveAll(Handler);
+		const resolved = scope.resolve(Handler);
 
 		expect(resolved).toBe(all[1]);
 	});
@@ -84,8 +88,9 @@ describe('resolveAll (transient)', () => {
 			.registerTransient(Handler, () => new Handler('a'))
 			.registerTransient(Handler, () => new Handler('b'));
 
-		const first = container.resolveAll(Handler);
-		const second = container.resolveAll(Handler);
+		const scope = createScope(container);
+		const first = scope.resolveAll(Handler);
+		const second = scope.resolveAll(Handler);
 		expect(first[0]).not.toBe(second[0]);
 		expect(first[1]).not.toBe(second[1]);
 	});
@@ -97,8 +102,9 @@ describe('resolveAll (mixed lifetimes)', () => {
 			.registerSingleton(Handler, () => new Handler('cached'))
 			.registerTransient(Handler, () => new Handler('fresh'));
 
-		const first = container.resolveAll(Handler);
-		const second = container.resolveAll(Handler);
+		const scope = createScope(container);
+		const first = scope.resolveAll(Handler);
+		const second = scope.resolveAll(Handler);
 
 		// Singleton: same instance
 		expect(first[0]).toBe(second[0]);
@@ -113,7 +119,7 @@ describe('resolveAll (PropertyKey tokens)', () => {
 			.registerSingleton('plugin', () => 'plugin-a')
 			.registerSingleton('plugin', () => 'plugin-b');
 
-		const plugins = container.resolveAll('plugin');
+		const plugins = createScope(container).resolveAll('plugin');
 		expect(plugins).toEqual(['plugin-a', 'plugin-b']);
 	});
 
@@ -123,7 +129,7 @@ describe('resolveAll (PropertyKey tokens)', () => {
 			.registerSingleton(token, () => 'first')
 			.registerSingleton(token, () => 'second');
 
-		const values = container.resolveAll(token);
+		const values = createScope(container).resolveAll(token);
 		expect(values).toEqual(['first', 'second']);
 	});
 });
@@ -134,7 +140,7 @@ describe('resolveAll (async)', () => {
 			.registerSingleton(AsyncService, async () => new AsyncService('a'))
 			.registerSingleton(AsyncService, async () => new AsyncService('b'));
 
-		const promises = container.resolveAll(AsyncService);
+		const promises = createScope(container).resolveAll(AsyncService);
 		expect(promises).toHaveLength(2);
 		expect(promises[0]).toBeInstanceOf(Promise);
 		expect(promises[1]).toBeInstanceOf(Promise);
@@ -148,25 +154,12 @@ describe('resolveAll (async)', () => {
 describe('resolveAll (unregistered)', () => {
 	test('throws ContainerError for unregistered token', () => {
 		const container = createContainer();
-		expect(() => (container as never as { resolveAll: (t: unknown) => unknown }).resolveAll(Handler)).toThrow(
-			ContainerError,
-		);
+		expect(() => createScope(container).resolveAll(Handler)).toThrow(ContainerError);
 	});
 
 	test('error message includes the token name', () => {
 		const container = createContainer();
-		expect(() => (container as never as { resolveAll: (t: unknown) => unknown }).resolveAll(Handler)).toThrow(
-			'Handler',
-		);
-	});
-});
-
-describe('resolveAll (scoped from root)', () => {
-	test('throws ContainerError when resolving scoped token from root container', () => {
-		const container = createContainer().registerScoped(Handler, () => new Handler('scoped'));
-		expect(() => (container as never as { resolveAll: (t: unknown) => unknown }).resolveAll(Handler)).toThrow(
-			'Cannot resolve scoped token',
-		);
+		expect(() => createScope(container).resolveAll(Handler)).toThrow('Handler');
 	});
 });
 
@@ -184,12 +177,12 @@ describe('resolveAll (circular dependency)', () => {
 			.registerSingleton(CircA, r => new CircA((r as never as { resolve: (t: unknown) => CircB }).resolve(CircB)))
 			.registerSingleton(CircB, r => new CircB((r as never as { resolve: (t: unknown) => CircA }).resolve(CircA)));
 
-		expect(() => container.resolveAll(CircA)).toThrow('Circular dependency detected');
+		expect(() => createScope(container).resolveAll(CircA)).toThrow('Circular dependency detected');
 	});
 });
 
 describe('resolveAll (disposed)', () => {
-	test('throws ContainerError when resolving from a disposed container', async () => {
+	test('throws ContainerError when creating a scope from a disposed container', async () => {
 		const { disposable } = await import('../disposable');
 		const container = disposable(
 			createContainer()
@@ -198,8 +191,8 @@ describe('resolveAll (disposed)', () => {
 		);
 
 		await container[Symbol.asyncDispose]();
-		expect(() => container.resolveAll(Handler)).toThrow(ContainerError);
-		expect(() => container.resolveAll(Handler)).toThrow('disposed');
+		expect(() => createScope(container)).toThrow(ContainerError);
+		expect(() => createScope(container)).toThrow('Cannot create a scope from a disposed container.');
 	});
 });
 
@@ -210,7 +203,8 @@ describe('resolveAll in factory (plugin injection pattern)', () => {
 			.registerSingleton(Handler, () => new Handler('metrics'))
 			.registerSingleton(ServiceB, r => new ServiceB(r.resolveAll(Handler)));
 
-		const bus = container.resolve(ServiceB);
+		const scope = createScope(container);
+		const bus = scope.resolve(ServiceB);
 		expect(bus.handlers).toHaveLength(2);
 		expect(bus.handlers[0].name).toBe('log');
 		expect(bus.handlers[1].name).toBe('metrics');
@@ -220,7 +214,7 @@ describe('resolveAll in factory (plugin injection pattern)', () => {
 describe('tryResolveAll', () => {
 	test('returns undefined for unregistered token', () => {
 		const container = createContainer();
-		expect(container.tryResolveAll(Handler)).toBeUndefined();
+		expect(createScope(container).tryResolveAll(Handler)).toBeUndefined();
 	});
 
 	test('returns an array for registered tokens', () => {
@@ -228,7 +222,7 @@ describe('tryResolveAll', () => {
 			.registerSingleton(Handler, () => new Handler('a'))
 			.registerSingleton(Handler, () => new Handler('b'));
 
-		const handlers = container.tryResolveAll(Handler) as Handler[];
+		const handlers = createScope(container).tryResolveAll(Handler) as Handler[];
 		expect(handlers).toHaveLength(2);
 		expect(handlers[0].name).toBe('a');
 		expect(handlers[1].name).toBe('b');
@@ -236,7 +230,7 @@ describe('tryResolveAll', () => {
 
 	test('returns undefined for unregistered string token', () => {
 		const container = createContainer();
-		expect(container.tryResolveAll('nonexistent')).toBeUndefined();
+		expect(createScope(container).tryResolveAll('nonexistent')).toBeUndefined();
 	});
 
 	test('throws ContainerError for circular dependency', () => {
@@ -252,7 +246,7 @@ describe('tryResolveAll', () => {
 			.registerSingleton(CircA, r => new CircA((r as never as { resolve: (t: unknown) => CircB }).resolve(CircB)))
 			.registerSingleton(CircB, r => new CircB((r as never as { resolve: (t: unknown) => CircA }).resolve(CircA)));
 
-		expect(() => container.tryResolveAll(CircA)).toThrow('Circular dependency detected');
+		expect(() => createScope(container).tryResolveAll(CircA)).toThrow('Circular dependency detected');
 	});
 });
 
@@ -263,7 +257,7 @@ describe('resolveAll preserves registration order', () => {
 			.registerSingleton(Handler, () => new Handler('second'))
 			.registerSingleton(Handler, () => new Handler('third'));
 
-		const handlers = container.resolveAll(Handler);
+		const handlers = createScope(container).resolveAll(Handler);
 		expect(handlers.map(h => h.name)).toEqual(['first', 'second', 'third']);
 	});
 });

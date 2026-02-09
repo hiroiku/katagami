@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { disposable } from '../disposable';
 import { ContainerError } from '../error';
+import { createScope } from '../scope';
 import { Container, createContainer } from '.';
 
 // Helper classes for testing
@@ -40,18 +41,18 @@ describe('registerSingleton', () => {
 
 	test('works with class token', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		expect(container.resolve(ServiceA)).toBeInstanceOf(ServiceA);
+		expect(createScope(container).resolve(ServiceA)).toBeInstanceOf(ServiceA);
 	});
 
 	test('works with string token', () => {
 		const container = createContainer().registerSingleton('greeting', () => 'hello');
-		expect(container.resolve('greeting')).toBe('hello');
+		expect(createScope(container).resolve('greeting')).toBe('hello');
 	});
 
 	test('works with Symbol token', () => {
 		const token = Symbol('myService');
 		const container = createContainer().registerSingleton(token, () => 42);
-		expect(container.resolve(token)).toBe(42);
+		expect(createScope(container).resolve(token)).toBe(42);
 	});
 });
 
@@ -64,27 +65,29 @@ describe('registerTransient', () => {
 
 	test('works with class token', () => {
 		const container = createContainer().registerTransient(ServiceA, () => new ServiceA());
-		expect(container.resolve(ServiceA)).toBeInstanceOf(ServiceA);
+		expect(createScope(container).resolve(ServiceA)).toBeInstanceOf(ServiceA);
 	});
 
 	test('works with string token', () => {
 		const container = createContainer().registerTransient('value', () => Math.random());
-		expect(typeof container.resolve('value')).toBe('number');
+		expect(typeof createScope(container).resolve('value')).toBe('number');
 	});
 });
 
 describe('resolve (singleton)', () => {
 	test('creates instance on first resolve', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const instance = container.resolve(ServiceA);
+		const scope = createScope(container);
+		const instance = scope.resolve(ServiceA);
 		expect(instance).toBeInstanceOf(ServiceA);
 		expect(instance.value).toBe('A');
 	});
 
 	test('returns the same instance on subsequent resolves', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const first = container.resolve(ServiceA);
-		const second = container.resolve(ServiceA);
+		const scope = createScope(container);
+		const first = scope.resolve(ServiceA);
+		const second = scope.resolve(ServiceA);
 		expect(first).toBe(second);
 	});
 });
@@ -92,8 +95,9 @@ describe('resolve (singleton)', () => {
 describe('resolve (transient)', () => {
 	test('creates a new instance on every resolve', () => {
 		const container = createContainer().registerTransient(ServiceA, () => new ServiceA());
-		const first = container.resolve(ServiceA);
-		const second = container.resolve(ServiceA);
+		const scope = createScope(container);
+		const first = scope.resolve(ServiceA);
+		const second = scope.resolve(ServiceA);
 		expect(first).not.toBe(second);
 		expect(first).toBeInstanceOf(ServiceA);
 		expect(second).toBeInstanceOf(ServiceA);
@@ -106,7 +110,7 @@ describe('registration override', () => {
 			.registerSingleton(ServiceA, () => new ServiceA('first'))
 			.registerSingleton(ServiceA, () => new ServiceA('second'));
 
-		expect(container.resolve(ServiceA).value).toBe('second');
+		expect(createScope(container).resolve(ServiceA).value).toBe('second');
 	});
 
 	test('lifetime can change on override (singleton -> transient)', () => {
@@ -114,8 +118,9 @@ describe('registration override', () => {
 			.registerSingleton(ServiceA, () => new ServiceA('singleton'))
 			.registerTransient(ServiceA, () => new ServiceA('transient'));
 
-		const first = container.resolve(ServiceA);
-		const second = container.resolve(ServiceA);
+		const scope = createScope(container);
+		const first = scope.resolve(ServiceA);
+		const second = scope.resolve(ServiceA);
 		expect(first).not.toBe(second);
 	});
 
@@ -124,8 +129,9 @@ describe('registration override', () => {
 			.registerTransient(ServiceA, () => new ServiceA('transient'))
 			.registerSingleton(ServiceA, () => new ServiceA('singleton'));
 
-		const first = container.resolve(ServiceA);
-		const second = container.resolve(ServiceA);
+		const scope = createScope(container);
+		const first = scope.resolve(ServiceA);
+		const second = scope.resolve(ServiceA);
 		expect(first).toBe(second);
 	});
 });
@@ -133,25 +139,27 @@ describe('registration override', () => {
 describe('resolve (unregistered)', () => {
 	test('throws ContainerError for unregistered token', () => {
 		const container = createContainer();
-		expect(() => (container as never as { resolve: (t: unknown) => unknown }).resolve(ServiceA)).toThrow(
-			ContainerError,
-		);
+		const scope = createScope(container);
+		expect(() => (scope as never as { resolve: (t: unknown) => unknown }).resolve(ServiceA)).toThrow(ContainerError);
 	});
 
 	test('error message includes the token name', () => {
 		const container = createContainer();
-		expect(() => (container as never as { resolve: (t: unknown) => unknown }).resolve(ServiceA)).toThrow('ServiceA');
+		const scope = createScope(container);
+		expect(() => (scope as never as { resolve: (t: unknown) => unknown }).resolve(ServiceA)).toThrow('ServiceA');
 	});
 
 	test('error message includes symbol description', () => {
 		const container = createContainer();
+		const scope = createScope(container);
 		const token = Symbol('myToken');
-		expect(() => (container as never as { resolve: (t: unknown) => unknown }).resolve(token)).toThrow('myToken');
+		expect(() => (scope as never as { resolve: (t: unknown) => unknown }).resolve(token)).toThrow('myToken');
 	});
 
 	test('error message includes string token', () => {
 		const container = createContainer();
-		expect(() => (container as never as { resolve: (t: unknown) => unknown }).resolve('unknownService')).toThrow(
+		const scope = createScope(container);
+		expect(() => (scope as never as { resolve: (t: unknown) => unknown }).resolve('unknownService')).toThrow(
 			'unknownService',
 		);
 	});
@@ -163,7 +171,7 @@ describe('Resolver injection', () => {
 			.registerSingleton(ServiceA, () => new ServiceA())
 			.registerSingleton(ServiceB, r => new ServiceB(r.resolve(ServiceA)));
 
-		const b = container.resolve(ServiceB);
+		const b = createScope(container).resolve(ServiceB);
 		expect(b).toBeInstanceOf(ServiceB);
 		expect(b.a).toBeInstanceOf(ServiceA);
 	});
@@ -176,7 +184,7 @@ describe('dependency graph', () => {
 			.registerSingleton(ServiceB, r => new ServiceB(r.resolve(ServiceA)))
 			.registerSingleton(ServiceC, r => new ServiceC(r.resolve(ServiceB)));
 
-		const c = container.resolve(ServiceC);
+		const c = createScope(container).resolve(ServiceC);
 		expect(c).toBeInstanceOf(ServiceC);
 		expect(c.b).toBeInstanceOf(ServiceB);
 		expect(c.b.a).toBeInstanceOf(ServiceA);
@@ -187,7 +195,8 @@ describe('dependency graph', () => {
 describe('async singleton (class)', () => {
 	test('resolves to a Promise that yields the correct instance', async () => {
 		const container = createContainer().registerSingleton(AsyncService, async () => new AsyncService('async'));
-		const result = container.resolve(AsyncService);
+		const scope = createScope(container);
+		const result = scope.resolve(AsyncService);
 		expect(result).toBeInstanceOf(Promise);
 		const instance = await result;
 		expect(instance).toBeInstanceOf(AsyncService);
@@ -196,8 +205,9 @@ describe('async singleton (class)', () => {
 
 	test('returns the same Promise on subsequent resolves', () => {
 		const container = createContainer().registerSingleton(AsyncService, async () => new AsyncService('async'));
-		const first = container.resolve(AsyncService);
-		const second = container.resolve(AsyncService);
+		const scope = createScope(container);
+		const first = scope.resolve(AsyncService);
+		const second = scope.resolve(AsyncService);
 		expect(first).toBe(second);
 	});
 });
@@ -205,7 +215,7 @@ describe('async singleton (class)', () => {
 describe('async singleton (string)', () => {
 	test('resolves async factory with string token', async () => {
 		const container = createContainer().registerSingleton('asyncGreeting', async () => 'hello async');
-		const result = await container.resolve('asyncGreeting');
+		const result = await createScope(container).resolve('asyncGreeting');
 		expect(result).toBe('hello async');
 	});
 });
@@ -213,8 +223,9 @@ describe('async singleton (string)', () => {
 describe('async transient', () => {
 	test('creates a new Promise on every resolve', async () => {
 		const container = createContainer().registerTransient(AsyncService, async () => new AsyncService('transient'));
-		const first = container.resolve(AsyncService);
-		const second = container.resolve(AsyncService);
+		const scope = createScope(container);
+		const first = scope.resolve(AsyncService);
+		const second = scope.resolve(AsyncService);
 		expect(first).not.toBe(second);
 		expect(await first).toBeInstanceOf(AsyncService);
 		expect(await second).toBeInstanceOf(AsyncService);
@@ -230,7 +241,7 @@ describe('async dependencies', () => {
 				return Promise.resolve(new AsyncService(a.value));
 			});
 
-		const instance = await container.resolve(AsyncService);
+		const instance = await createScope(container).resolve(AsyncService);
 		expect(instance.value).toBe('A');
 	});
 
@@ -242,7 +253,7 @@ describe('async dependencies', () => {
 				return new DependsOnAsync(async);
 			});
 
-		const instance = await container.resolve(DependsOnAsync);
+		const instance = await createScope(container).resolve(DependsOnAsync);
 		expect(instance).toBeInstanceOf(DependsOnAsync);
 		expect(instance.async).toBeInstanceOf(AsyncService);
 		expect(instance.async.value).toBe('dep');
@@ -255,8 +266,9 @@ describe('type inference (sync/async mixed)', () => {
 			.registerSingleton(ServiceA, () => new ServiceA())
 			.registerSingleton(AsyncService, async () => new AsyncService('mixed'));
 
-		const syncResult = container.resolve(ServiceA);
-		const asyncResult = container.resolve(AsyncService);
+		const scope = createScope(container);
+		const syncResult = scope.resolve(ServiceA);
+		const asyncResult = scope.resolve(AsyncService);
 
 		expect(syncResult).toBeInstanceOf(ServiceA);
 		expect(asyncResult).toBeInstanceOf(Promise);
@@ -297,7 +309,7 @@ describe('circular dependency detection', () => {
 				r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
 			);
 
-		expect(() => container.resolve(CircularA)).toThrow(ContainerError);
+		expect(() => createScope(container).resolve(CircularA)).toThrow(ContainerError);
 	});
 
 	test('detects direct circular dependency (A -> B -> A) with transient', () => {
@@ -311,7 +323,7 @@ describe('circular dependency detection', () => {
 				r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
 			);
 
-		expect(() => container.resolve(CircularA)).toThrow(ContainerError);
+		expect(() => createScope(container).resolve(CircularA)).toThrow(ContainerError);
 	});
 
 	test('detects indirect circular dependency (X -> Y -> Z -> X)', () => {
@@ -329,7 +341,7 @@ describe('circular dependency detection', () => {
 				r => new CircularZ((r as never as { resolve: (t: unknown) => CircularX }).resolve(CircularX)),
 			);
 
-		expect(() => container.resolve(CircularX)).toThrow(ContainerError);
+		expect(() => createScope(container).resolve(CircularX)).toThrow(ContainerError);
 	});
 
 	test('error message includes "Circular dependency detected"', () => {
@@ -343,7 +355,7 @@ describe('circular dependency detection', () => {
 				r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
 			);
 
-		expect(() => container.resolve(CircularA)).toThrow('Circular dependency detected');
+		expect(() => createScope(container).resolve(CircularA)).toThrow('Circular dependency detected');
 	});
 
 	test('error message includes the circular path for direct cycle', () => {
@@ -357,7 +369,7 @@ describe('circular dependency detection', () => {
 				r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
 			);
 
-		expect(() => container.resolve(CircularA)).toThrow('CircularA -> CircularB -> CircularA');
+		expect(() => createScope(container).resolve(CircularA)).toThrow('CircularA -> CircularB -> CircularA');
 	});
 
 	test('error message includes the circular path for indirect cycle', () => {
@@ -375,7 +387,7 @@ describe('circular dependency detection', () => {
 				r => new CircularZ((r as never as { resolve: (t: unknown) => CircularX }).resolve(CircularX)),
 			);
 
-		expect(() => container.resolve(CircularX)).toThrow('CircularX -> CircularY -> CircularZ -> CircularX');
+		expect(() => createScope(container).resolve(CircularX)).toThrow('CircularX -> CircularY -> CircularZ -> CircularX');
 	});
 
 	test('detects circular dependency with async factories', () => {
@@ -389,7 +401,7 @@ describe('circular dependency detection', () => {
 				async r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
 			);
 
-		expect(() => container.resolve(CircularB)).toThrow('Circular dependency detected');
+		expect(() => createScope(container).resolve(CircularB)).toThrow('Circular dependency detected');
 	});
 
 	test('does not affect non-circular dependency chains', () => {
@@ -398,7 +410,7 @@ describe('circular dependency detection', () => {
 			.registerSingleton(ServiceB, r => new ServiceB(r.resolve(ServiceA)))
 			.registerSingleton(ServiceC, r => new ServiceC(r.resolve(ServiceB)));
 
-		const c = container.resolve(ServiceC);
+		const c = createScope(container).resolve(ServiceC);
 		expect(c).toBeInstanceOf(ServiceC);
 		expect(c.b).toBeInstanceOf(ServiceB);
 		expect(c.b.a).toBeInstanceOf(ServiceA);
@@ -409,8 +421,9 @@ describe('circular dependency detection', () => {
 			.registerSingleton(ServiceA, () => new ServiceA())
 			.registerSingleton(ServiceB, r => new ServiceB(r.resolve(ServiceA)));
 
-		const first = container.resolve(ServiceB);
-		const second = container.resolve(ServiceB);
+		const scope = createScope(container);
+		const first = scope.resolve(ServiceB);
+		const second = scope.resolve(ServiceB);
 		expect(first).toBe(second);
 	});
 
@@ -430,7 +443,7 @@ describe('circular dependency detection', () => {
 			);
 
 		try {
-			container.resolve(ServiceA);
+			createScope(container).resolve(ServiceA);
 		} catch (e) {
 			expect(e).toBeInstanceOf(ContainerError);
 			expect((e as ContainerError).message).toBe('Circular dependency detected: CircularA -> CircularB -> CircularA');
@@ -447,9 +460,9 @@ describe('circular dependency detection', () => {
 			r => new SelfRef((r as never as { resolve: (t: unknown) => SelfRef }).resolve(SelfRef)),
 		);
 
-		expect(() => container.resolve(SelfRef)).toThrow(ContainerError);
-		expect(() => container.resolve(SelfRef)).toThrow('Circular dependency detected');
-		expect(() => container.resolve(SelfRef)).toThrow('SelfRef -> SelfRef');
+		expect(() => createScope(container).resolve(SelfRef)).toThrow(ContainerError);
+		expect(() => createScope(container).resolve(SelfRef)).toThrow('Circular dependency detected');
+		expect(() => createScope(container).resolve(SelfRef)).toThrow('SelfRef -> SelfRef');
 	});
 });
 
@@ -461,40 +474,42 @@ class Unregistered {
 describe('tryResolve (singleton)', () => {
 	test('returns the instance for a registered singleton class token', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const instance = container.tryResolve(ServiceA);
+		const instance = createScope(container).tryResolve(ServiceA);
 		expect(instance).toBeInstanceOf(ServiceA);
 	});
 
 	test('returns the same cached instance on subsequent calls', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const first = container.tryResolve(ServiceA);
-		const second = container.tryResolve(ServiceA);
+		const scope = createScope(container);
+		const first = scope.tryResolve(ServiceA);
+		const second = scope.tryResolve(ServiceA);
 		expect(first).toBe(second);
 	});
 
 	test('works with string token', () => {
 		const container = createContainer().registerSingleton('greeting', () => 'hello');
-		expect(container.tryResolve('greeting')).toBe('hello');
+		expect(createScope(container).tryResolve('greeting')).toBe('hello');
 	});
 
 	test('works with Symbol token', () => {
 		const token = Symbol('myService');
 		const container = createContainer().registerSingleton(token, () => 42);
-		expect(container.tryResolve(token)).toBe(42);
+		expect(createScope(container).tryResolve(token)).toBe(42);
 	});
 });
 
 describe('tryResolve (transient)', () => {
 	test('returns the instance for a registered transient class token', () => {
 		const container = createContainer().registerTransient(ServiceA, () => new ServiceA());
-		const instance = container.tryResolve(ServiceA);
+		const instance = createScope(container).tryResolve(ServiceA);
 		expect(instance).toBeInstanceOf(ServiceA);
 	});
 
 	test('creates a new instance on every call', () => {
 		const container = createContainer().registerTransient(ServiceA, () => new ServiceA());
-		const first = container.tryResolve(ServiceA);
-		const second = container.tryResolve(ServiceA);
+		const scope = createScope(container);
+		const first = scope.tryResolve(ServiceA);
+		const second = scope.tryResolve(ServiceA);
 		expect(first).not.toBe(second);
 		expect(first).toBeInstanceOf(ServiceA);
 		expect(second).toBeInstanceOf(ServiceA);
@@ -504,25 +519,26 @@ describe('tryResolve (transient)', () => {
 describe('tryResolve (unregistered)', () => {
 	test('returns undefined for unregistered class token', () => {
 		const container = createContainer();
-		expect(container.tryResolve(Unregistered)).toBeUndefined();
+		expect(createScope(container).tryResolve(Unregistered)).toBeUndefined();
 	});
 
 	test('returns undefined for unregistered string token', () => {
 		const container = createContainer();
-		expect(container.tryResolve('nonexistent')).toBeUndefined();
+		expect(createScope(container).tryResolve('nonexistent')).toBeUndefined();
 	});
 
 	test('returns undefined for unregistered Symbol token', () => {
 		const container = createContainer();
 		const token = Symbol('unknown');
-		expect(container.tryResolve(token)).toBeUndefined();
+		expect(createScope(container).tryResolve(token)).toBeUndefined();
 	});
 });
 
 describe('tryResolve (async)', () => {
 	test('returns a Promise for async singleton', async () => {
 		const container = createContainer().registerSingleton(AsyncService, async () => new AsyncService('async'));
-		const result = container.tryResolve(AsyncService);
+		const scope = createScope(container);
+		const result = scope.tryResolve(AsyncService);
 		expect(result).toBeInstanceOf(Promise);
 		const instance = await (result as Promise<AsyncService>);
 		expect(instance).toBeInstanceOf(AsyncService);
@@ -531,25 +547,20 @@ describe('tryResolve (async)', () => {
 
 	test('returns the same Promise on subsequent calls', () => {
 		const container = createContainer().registerSingleton(AsyncService, async () => new AsyncService('async'));
-		const first = container.tryResolve(AsyncService);
-		const second = container.tryResolve(AsyncService);
+		const scope = createScope(container);
+		const first = scope.tryResolve(AsyncService);
+		const second = scope.tryResolve(AsyncService);
 		expect(first).toBe(second);
 	});
 });
 
 describe('tryResolve (error conditions)', () => {
-	test('throws ContainerError for disposed container', async () => {
-		const container = disposable(createContainer().registerSingleton(ServiceA, () => new ServiceA()));
-		await container[Symbol.asyncDispose]();
-		expect(() => container.tryResolve(ServiceA)).toThrow(ContainerError);
-		expect(() => container.tryResolve(ServiceA)).toThrow('disposed');
-	});
-
-	test('throws ContainerError for scoped token from root container', () => {
-		const container = createContainer().registerScoped(ServiceA, () => new ServiceA());
-		const tryResolve = (container as never as { tryResolve: (t: unknown) => unknown }).tryResolve.bind(container);
-		expect(() => tryResolve(ServiceA)).toThrow(ContainerError);
-		expect(() => tryResolve(ServiceA)).toThrow('Cannot resolve scoped token');
+	test('throws ContainerError for disposed scope', async () => {
+		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
+		const scope = disposable(createScope(container));
+		await scope[Symbol.asyncDispose]();
+		expect(() => scope.tryResolve(ServiceA)).toThrow(ContainerError);
+		expect(() => scope.tryResolve(ServiceA)).toThrow('disposed');
 	});
 
 	test('throws ContainerError for circular dependency', () => {
@@ -563,8 +574,8 @@ describe('tryResolve (error conditions)', () => {
 				r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
 			);
 
-		expect(() => container.tryResolve(CircularA)).toThrow(ContainerError);
-		expect(() => container.tryResolve(CircularA)).toThrow('Circular dependency detected');
+		expect(() => createScope(container).tryResolve(CircularA)).toThrow(ContainerError);
+		expect(() => createScope(container).tryResolve(CircularA)).toThrow('Circular dependency detected');
 	});
 });
 
@@ -575,7 +586,7 @@ describe('tryResolve (dependency graph)', () => {
 			.registerSingleton(ServiceB, r => new ServiceB(r.resolve(ServiceA)))
 			.registerSingleton(ServiceC, r => new ServiceC(r.resolve(ServiceB)));
 
-		const c = container.tryResolve(ServiceC) as ServiceC;
+		const c = createScope(container).tryResolve(ServiceC) as ServiceC;
 		expect(c).toBeInstanceOf(ServiceC);
 		expect(c.b).toBeInstanceOf(ServiceB);
 		expect(c.b.a).toBeInstanceOf(ServiceA);
@@ -588,7 +599,7 @@ describe('factory error recovery', () => {
 			throw new Error('factory failed');
 		});
 
-		expect(() => container.resolve(ServiceA)).toThrow('factory failed');
+		expect(() => createScope(container).resolve(ServiceA)).toThrow('factory failed');
 	});
 
 	test('retries resolution after factory throws — no false circular dependency', () => {
@@ -601,10 +612,10 @@ describe('factory error recovery', () => {
 			return new ServiceA('recovered');
 		});
 
-		expect(() => container.resolve(ServiceA)).toThrow('first attempt failed');
+		expect(() => createScope(container).resolve(ServiceA)).toThrow('first attempt failed');
 
 		// Second resolve should retry the factory, not throw circular dependency error
-		const instance = container.resolve(ServiceA);
+		const instance = createScope(container).resolve(ServiceA);
 		expect(instance).toBeInstanceOf(ServiceA);
 		expect(instance.value).toBe('recovered');
 		expect(callCount).toBe(2);
@@ -620,11 +631,11 @@ describe('factory error recovery', () => {
 			return new ServiceA('success');
 		});
 
-		expect(() => container.resolve(ServiceA)).toThrow('init failed');
+		expect(() => createScope(container).resolve(ServiceA)).toThrow('init failed');
 		expect(callCount).toBe(1);
 
 		// Factory should be called again since no instance was cached
-		const instance = container.resolve(ServiceA);
+		const instance = createScope(container).resolve(ServiceA);
 		expect(instance.value).toBe('success');
 		expect(callCount).toBe(2);
 	});
@@ -639,9 +650,9 @@ describe('factory error recovery', () => {
 			return new ServiceA('ok');
 		});
 
-		expect(() => container.resolve(ServiceA)).toThrow('transient failed');
+		expect(() => createScope(container).resolve(ServiceA)).toThrow('transient failed');
 
-		const instance = container.resolve(ServiceA);
+		const instance = createScope(container).resolve(ServiceA);
 		expect(instance.value).toBe('ok');
 	});
 });
@@ -654,8 +665,9 @@ describe('singleton caching edge cases', () => {
 			return null;
 		});
 
-		const first = container.resolve('nullable');
-		const second = container.resolve('nullable');
+		const scope = createScope(container);
+		const first = scope.resolve('nullable');
+		const second = scope.resolve('nullable');
 		expect(first).toBeNull();
 		expect(second).toBeNull();
 		expect(callCount).toBe(1);
@@ -668,8 +680,9 @@ describe('singleton caching edge cases', () => {
 			return undefined;
 		});
 
-		container.resolve('undef');
-		container.resolve('undef');
+		const scope = createScope(container);
+		scope.resolve('undef');
+		scope.resolve('undef');
 
 		// The cache check uses `!== undefined`, so undefined values are not properly cached.
 		// This documents the current behavior: the factory is called on every resolve.
@@ -686,7 +699,7 @@ describe('tryResolve in factory', () => {
 				return new ServiceB(a ?? new ServiceA('fallback'));
 			});
 
-		const b = container.resolve(ServiceB);
+		const b = createScope(container).resolve(ServiceB);
 		expect(b.a.value).toBe('injected');
 	});
 
@@ -696,7 +709,7 @@ describe('tryResolve in factory', () => {
 			return new ServiceB(a ?? new ServiceA('fallback'));
 		});
 
-		const b = container.resolve(ServiceB);
+		const b = createScope(container).resolve(ServiceB);
 		expect(b.a.value).toBe('fallback');
 	});
 });
@@ -707,8 +720,9 @@ describe('async singleton (rejected Promise)', () => {
 			throw new Error('init failed');
 		});
 
-		const first = container.resolve(AsyncService);
-		const second = container.resolve(AsyncService);
+		const scope = createScope(container);
+		const first = scope.resolve(AsyncService);
+		const second = scope.resolve(AsyncService);
 
 		// The same rejected Promise object is cached and returned
 		expect(first).toBe(second);
@@ -721,13 +735,13 @@ describe('registration after resolve', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA('first'));
 
 		// Resolve caches the 'first' instance for the first registration
-		const cached = container.resolve(ServiceA);
+		const cached = createScope(container).resolve(ServiceA);
 		expect(cached.value).toBe('first');
 
 		// Add a new registration — resolve() now uses the last registration
 		container.registerSingleton(ServiceA, () => new ServiceA('second'));
 
-		const result = container.resolve(ServiceA);
+		const result = createScope(container).resolve(ServiceA);
 		expect(result.value).toBe('second');
 		expect(result).not.toBe(cached);
 	});
@@ -736,13 +750,14 @@ describe('registration after resolve', () => {
 describe('number token', () => {
 	test('works with number token for singleton', () => {
 		const container = createContainer().registerSingleton(0, () => 'zero');
-		expect(container.resolve(0)).toBe('zero');
+		expect(createScope(container).resolve(0)).toBe('zero');
 	});
 
 	test('works with number token for transient', () => {
 		const container = createContainer().registerTransient(1, () => Math.random());
-		const first = container.resolve(1);
-		const second = container.resolve(1);
+		const scope = createScope(container);
+		const first = scope.resolve(1);
+		const second = scope.resolve(1);
 		expect(typeof first).toBe('number');
 		expect(first).not.toBe(second);
 	});
@@ -760,7 +775,7 @@ describe('mixed lifetime circular dependency', () => {
 				r => new CircularB((r as never as { resolve: (t: unknown) => CircularA }).resolve(CircularA)),
 			);
 
-		expect(() => container.resolve(CircularA)).toThrow(ContainerError);
-		expect(() => container.resolve(CircularA)).toThrow('Circular dependency detected');
+		expect(() => createScope(container).resolve(CircularA)).toThrow(ContainerError);
+		expect(() => createScope(container).resolve(CircularA)).toThrow('Circular dependency detected');
 	});
 });

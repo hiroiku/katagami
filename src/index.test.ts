@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { Container, ContainerError, createContainer } from './index';
-import { createScope, Scope } from './scope';
+import { Container, ContainerError, createContainer, createScope, Scope } from './index';
 
 describe('public API exports', () => {
 	test('exports createContainer function', () => {
@@ -30,7 +29,7 @@ describe('public API exports', () => {
 
 		const container = createContainer().registerSingleton(MyService, () => new MyService('hello'));
 
-		const instance = container.resolve(MyService);
+		const instance = createScope(container).resolve(MyService);
 		expect(instance.value).toBe('hello');
 
 		const scope = createScope(container);
@@ -41,6 +40,8 @@ describe('public API exports', () => {
 	test('ContainerError is thrown for unregistered token via public API', () => {
 		class Unknown {}
 		const container = createContainer();
-		expect(() => (container as never as { resolve: (t: unknown) => unknown }).resolve(Unknown)).toThrow(ContainerError);
+		expect(() => (createScope(container) as never as { resolve: (t: unknown) => unknown }).resolve(Unknown)).toThrow(
+			ContainerError,
+		);
 	});
 });

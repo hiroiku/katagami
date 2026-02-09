@@ -1,5 +1,4 @@
-import type { Container } from '../container';
-import type { DisposableContainer, DisposableScope } from '../disposable';
+import type { DisposableScope } from '../disposable';
 import type { AbstractConstructor } from '../resolver';
 import type { Scope } from '../scope';
 
@@ -13,19 +12,20 @@ import type { Scope } from '../scope';
  * Only **sync class tokens** are supported. Async tokens and PropertyKey tokens
  * are rejected at the type level.
  *
- * @param source A Container, Scope, DisposableContainer, or DisposableScope
+ * @param source A Scope or DisposableScope
  * @param token  A sync class constructor token
  * @returns A proxy that transparently forwards to the lazily-resolved instance
  *
  * @example
  * ```ts
- * import { createContainer } from 'katagami';
+ * import { createContainer, createScope } from 'katagami';
  * import { lazy } from 'katagami/lazy';
  *
  * const container = createContainer()
  *   .registerSingleton(HeavyService, () => new HeavyService());
  *
- * const service = lazy(container, HeavyService);
+ * const scope = createScope(container);
+ * const service = lazy(scope, HeavyService);
  * // Instance is NOT created yet
  * service.doSomething(); // resolved here, then cached
  * ```
@@ -38,30 +38,9 @@ export function lazy<
 	ScopedSync extends AbstractConstructor,
 	ScopedAsync extends AbstractConstructor,
 	V,
->(source: Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>, token: AbstractConstructor<V> & Sync): V;
-export function lazy<
-	T,
-	Sync extends AbstractConstructor,
-	Async extends AbstractConstructor,
-	ScopedT,
-	ScopedSync extends AbstractConstructor,
-	ScopedAsync extends AbstractConstructor,
-	V,
 >(
 	source: Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>,
 	token: AbstractConstructor<V> & (Sync | ScopedSync),
-): V;
-export function lazy<
-	T,
-	Sync extends AbstractConstructor,
-	Async extends AbstractConstructor,
-	ScopedT,
-	ScopedSync extends AbstractConstructor,
-	ScopedAsync extends AbstractConstructor,
-	V,
->(
-	source: DisposableContainer<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>,
-	token: AbstractConstructor<V> & Sync,
 ): V;
 export function lazy<
 	T,

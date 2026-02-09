@@ -19,65 +19,15 @@ import { lazy } from '.';
 abstract class ServiceA {
 	public abstract a: string;
 }
-abstract class AsyncService {
-	public abstract v: string;
-}
 abstract class ScopedService {
 	public abstract s: string;
 }
 abstract class ScopedAsyncService {
 	public abstract sa: string;
 }
-abstract class UnregisteredService {
-	public abstract u: string;
-}
 
 // ===========================================================================
-// 1. Container + sync class token → OK
-// ===========================================================================
-
-{
-	const container = createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA);
-
-	const result = lazy(container, ServiceA);
-	const _check: ServiceA = result;
-}
-
-// ===========================================================================
-// 2. Container + async class token → @ts-expect-error
-// ===========================================================================
-
-{
-	const container = createContainer().registerSingleton(AsyncService, () => Promise.resolve({} as AsyncService));
-
-	// @ts-expect-error — async class token cannot be used with lazy
-	lazy(container, AsyncService);
-}
-
-// ===========================================================================
-// 3. Container + unregistered token → @ts-expect-error
-// ===========================================================================
-
-{
-	const container = createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA);
-
-	// @ts-expect-error — unregistered class token cannot be used with lazy
-	lazy(container, UnregisteredService);
-}
-
-// ===========================================================================
-// 4. Container + scoped-only token → @ts-expect-error
-// ===========================================================================
-
-{
-	const container = createContainer().registerScoped(ScopedService, () => ({}) as ScopedService);
-
-	// @ts-expect-error — scoped token cannot be resolved from Container via lazy
-	lazy(container, ScopedService);
-}
-
-// ===========================================================================
-// 5. Scope + sync class token → OK
+// 1. Scope + sync class token → OK
 // ===========================================================================
 
 {
@@ -89,7 +39,7 @@ abstract class UnregisteredService {
 }
 
 // ===========================================================================
-// 6. Scope + scoped sync class token → OK
+// 2. Scope + scoped sync class token → OK
 // ===========================================================================
 
 {
@@ -101,7 +51,7 @@ abstract class UnregisteredService {
 }
 
 // ===========================================================================
-// 7. Scope + async scoped token → @ts-expect-error
+// 3. Scope + async scoped token → @ts-expect-error
 // ===========================================================================
 
 {
@@ -115,18 +65,7 @@ abstract class UnregisteredService {
 }
 
 // ===========================================================================
-// 8. DisposableContainer + sync class token → OK
-// ===========================================================================
-
-{
-	const container = disposable(createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA));
-
-	const result = lazy(container, ServiceA);
-	const _check: ServiceA = result;
-}
-
-// ===========================================================================
-// 9. DisposableScope + scoped sync class token → OK
+// 4. DisposableScope + scoped sync class token → OK
 // ===========================================================================
 
 {
@@ -138,13 +77,14 @@ abstract class UnregisteredService {
 }
 
 // ===========================================================================
-// 10. Return type is V (not Promise<V> or Proxy<V>)
+// 5. Return type is V (not Promise<V> or Proxy<V>)
 // ===========================================================================
 
 {
 	const container = createContainer().registerSingleton(ServiceA, () => ({}) as ServiceA);
+	const scope = createScope(container);
 
-	const result = lazy(container, ServiceA);
+	const result = lazy(scope, ServiceA);
 
 	// The return type should be ServiceA, not Promise<ServiceA>
 	const _sync: ServiceA = result;

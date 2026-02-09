@@ -18,7 +18,7 @@ describe('Scope resolveAll (singleton)', () => {
 			.registerSingleton(Handler, () => new Handler('log'))
 			.registerSingleton(Handler, () => new Handler('metrics'));
 
-		const containerHandlers = container.resolveAll(Handler);
+		const containerHandlers = createScope(container).resolveAll(Handler);
 		const scope = createScope(container);
 		const scopeHandlers = scope.resolveAll(Handler);
 
@@ -34,7 +34,7 @@ describe('Scope resolveAll (singleton)', () => {
 
 		const scope = createScope(container);
 		const scopeHandlers = scope.resolveAll(Handler);
-		const containerHandlers = container.resolveAll(Handler);
+		const containerHandlers = createScope(container).resolveAll(Handler);
 
 		expect(containerHandlers[0]).toBe(scopeHandlers[0]);
 		expect(containerHandlers[1]).toBe(scopeHandlers[1]);

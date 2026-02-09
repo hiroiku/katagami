@@ -12,21 +12,21 @@
 
 ## 특징
 
-| 특징                 | 설명                                                                                                    |
-| -------------------- | ------------------------------------------------------------------------------------------------------- |
-| 제로 의존성          | 데코레이터 불필요, reflect-metadata 불필요, 폴리필 불필요 — 어떤 번들러에서든 바로 사용 가능            |
-| 완전한 타입 추론     | 메서드 체이닝으로 타입이 축적되며, 미등록 토큰 해석은 컴파일 타임 오류 발생                             |
-| Tree Shaking 지원    | 서브패스 익스포트(`katagami/scope`, `katagami/disposable`)와 `sideEffects: false`로 최소 번들 크기 실현 |
-| 캡티브 의존성 방지   | Singleton/Transient 팩토리는 Scoped 토큰에 접근 불가; 컴파일 타임 및 스코프 내 런타임에 감지            |
-| 하이브리드 토큰 전략 | 클래스 토큰으로 엄격한 타입 안전성, PropertyKey 토큰으로 유연성                                         |
-| 인터페이스 타입 맵   | `createContainer<T>()`에 인터페이스를 전달하여 등록 순서 무관한 등록                                    |
-| 세 가지 라이프타임   | Singleton, Transient, Scoped (자식 컨테이너 지원)                                                       |
-| Disposable 지원      | TC39 명시적 리소스 관리 (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`)                      |
-| 모듈 합성            | `use()`를 통한 컨테이너 합성으로 등록을 그룹화 및 재사용                                                |
-| 비동기 팩토리        | Promise를 반환하는 팩토리는 타입 시스템이 자동 추적                                                     |
-| 순환 의존성 감지     | 전체 순환 경로를 포함하는 명확한 오류 메시지                                                            |
-| 선택적 해석          | `tryResolve`는 미등록 토큰 시 throw 대신 `undefined` 반환                                               |
-| 지연 해석            | `katagami/lazy`의 `lazy()`를 통한 Proxy 기반 지연 인스턴스 생성; 첫 접근 시 생성                        |
+| 특징                 | 설명                                                                                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------------ |
+| 제로 의존성          | 데코레이터 불필요, reflect-metadata 불필요, 폴리필 불필요 — 어떤 번들러에서든 바로 사용 가능           |
+| 완전한 타입 추론     | 메서드 체이닝으로 타입이 축적되며, 미등록 토큰 해석은 컴파일 타임 오류 발생                            |
+| Tree Shaking 지원    | 서브패스 익스포트(`katagami/disposable`, `katagami/lazy`)와 `sideEffects: false`로 최소 번들 크기 실현 |
+| 캡티브 의존성 방지   | Singleton/Transient 팩토리는 Scoped 토큰에 접근 불가; 컴파일 타임 및 스코프 내 런타임에 감지           |
+| 하이브리드 토큰 전략 | 클래스 토큰으로 엄격한 타입 안전성, PropertyKey 토큰으로 유연성                                        |
+| 인터페이스 타입 맵   | `createContainer<T>()`에 인터페이스를 전달하여 등록 순서 무관한 등록                                   |
+| 세 가지 라이프타임   | Singleton, Transient, Scoped (자식 컨테이너 지원)                                                      |
+| Disposable 지원      | TC39 명시적 리소스 관리 (`Symbol.dispose` / `Symbol.asyncDispose` / `await using`)                     |
+| 모듈 합성            | `use()`를 통한 컨테이너 합성으로 등록을 그룹화 및 재사용                                               |
+| 비동기 팩토리        | Promise를 반환하는 팩토리는 타입 시스템이 자동 추적                                                    |
+| 순환 의존성 감지     | 전체 순환 경로를 포함하는 명확한 오류 메시지                                                           |
+| 선택적 해석          | `tryResolve`는 미등록 토큰 시 throw 대신 `undefined` 반환                                              |
+| 지연 해석            | `katagami/lazy`의 `lazy()`를 통한 Proxy 기반 지연 인스턴스 생성; 첫 접근 시 생성                       |
 
 ## 설치
 
@@ -37,7 +37,7 @@ npm install katagami
 ## 빠른 시작
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Logger {
 	log(msg: string) {
@@ -56,7 +56,7 @@ const container = createContainer()
 	.registerSingleton(Logger, () => new Logger())
 	.registerSingleton(UserService, r => new UserService(r.resolve(Logger)));
 
-const userService = container.resolve(UserService);
+const userService = createScope(container).resolve(UserService);
 //    ^? UserService (완전히 추론됨)
 userService.greet('world');
 ```
@@ -94,14 +94,13 @@ userService.greet('world');
 
 ### Tree Shaking 지원
 
-Katagami는 서브패스 익스포트로 기능을 분할합니다. 필요한 것만 임포트하세요 — `katagami/scope`, `katagami/disposable`, `katagami/lazy`는 임포트하지 않으면 번들에서 완전히 제거됩니다. `sideEffects: false`와 결합하여 번들러가 사용하지 않는 모든 바이트를 제거할 수 있습니다.
+Katagami는 서브패스 익스포트로 기능을 분할합니다. 필요한 것만 임포트하세요 — `katagami/disposable`, `katagami/lazy`는 임포트하지 않으면 번들에서 완전히 제거됩니다. `sideEffects: false`와 결합하여 번들러가 사용하지 않는 모든 바이트를 제거할 수 있습니다.
 
 ```ts
-// 코어만 — scope, disposable, lazy는 번들에 포함되지 않음
-import { createContainer } from 'katagami';
+// 코어만 — disposable, lazy는 번들에 포함되지 않음
+import { createContainer, createScope } from 'katagami';
 
 // 필요한 것만 임포트
-import { createScope } from 'katagami/scope';
 import { disposable } from 'katagami/disposable';
 import { lazy } from 'katagami/lazy';
 ```
@@ -129,7 +128,7 @@ import { lazy } from 'katagami/lazy';
 Singleton은 첫 번째 `resolve`에서 인스턴스를 생성하고 캐시합니다. Transient는 매번 새로운 인스턴스를 생성합니다.
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Database {
 	constructor(public id = Math.random()) {}
@@ -143,20 +142,21 @@ const container = createContainer()
 	.registerSingleton(Database, () => new Database())
 	.registerTransient(RequestHandler, () => new RequestHandler());
 
+const scope = createScope(container);
+
 // Singleton — 매번 같은 인스턴스
-container.resolve(Database) === container.resolve(Database); // true
+scope.resolve(Database) === scope.resolve(Database); // true
 
 // Transient — 매번 새로운 인스턴스
-container.resolve(RequestHandler) === container.resolve(RequestHandler); // false
+scope.resolve(RequestHandler) === scope.resolve(RequestHandler); // false
 ```
 
 ### Scoped 라이프타임과 자식 컨테이너
 
-Scoped 등록은 스코프 내에서는 Singleton처럼 동작하지만 각 새로운 스코프에서 새 인스턴스를 생성합니다. `katagami/scope`에서 `createScope`를 임포트하여 자식 컨테이너를 생성합니다. Scoped 토큰은 루트 컨테이너에서 해석할 수 없습니다.
+Scoped 등록은 스코프 내에서는 Singleton처럼 동작하지만 각 새로운 스코프에서 새 인스턴스를 생성합니다. `createScope`를 사용하여 자식 컨테이너를 생성합니다. Scoped 토큰은 루트 컨테이너에서 해석할 수 없습니다.
 
 ```ts
-import { createContainer } from 'katagami';
-import { createScope } from 'katagami/scope';
+import { createContainer, createScope } from 'katagami';
 
 class DbPool {
 	constructor(public name = 'main') {}
@@ -247,7 +247,7 @@ const container = createContainer().use(appModule);
 `Promise`를 반환하는 팩토리는 타입 시스템이 자동으로 추적합니다. 비동기 토큰을 `resolve`하면 반환 타입은 `V`가 아닌 `Promise<V>`입니다:
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Database {
 	constructor(public connected: boolean) {}
@@ -266,10 +266,12 @@ const container = createContainer()
 		return new Database(true);
 	});
 
-const logger = container.resolve(Logger);
+const scope = createScope(container);
+
+const logger = scope.resolve(Logger);
 //    ^? Logger
 
-const db = await container.resolve(Database);
+const db = await scope.resolve(Database);
 //    ^? Promise<Database>  (await 후 → Database)
 db.connected; // true
 ```
@@ -291,7 +293,7 @@ const container = createContainer()
 Katagami는 현재 해석 중인 토큰을 추적합니다. 순환 의존성이 발견되면 전체 순환 경로를 포함하는 `ContainerError`가 발생합니다:
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class ServiceA {
 	constructor(public b: ServiceB) {}
@@ -305,7 +307,7 @@ const container = createContainer()
 	.registerSingleton(ServiceA, r => new ServiceA(r.resolve(ServiceB)))
 	.registerSingleton(ServiceB, r => new ServiceB(r.resolve(ServiceA)));
 
-container.resolve(ServiceA);
+createScope(container).resolve(ServiceA);
 // ContainerError: Circular dependency detected: ServiceA -> ServiceB -> ServiceA
 ```
 
@@ -320,7 +322,7 @@ ContainerError: Circular dependency detected: ServiceX -> ServiceY -> ServiceZ -
 폐기 기능은 `katagami/disposable`의 `disposable()` 래퍼를 통해 제공됩니다. 컨테이너 또는 스코프를 래핑하면 `[Symbol.asyncDispose]`가 부착되어 `await using` 구문을 사용할 수 있습니다. 폐기 시 관리 대상 인스턴스가 생성 역순(LIFO)으로 순회되며, `[Symbol.asyncDispose]()` 또는 `[Symbol.dispose]()` 메서드가 자동으로 호출됩니다.
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 import { disposable } from 'katagami/disposable';
 
 class Connection {
@@ -330,17 +332,18 @@ class Connection {
 }
 
 // 수동 폐기
-const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
+const container = createContainer().registerSingleton(Connection, () => new Connection());
+const dc = disposable(container);
 
-container.resolve(Connection);
-await container[Symbol.asyncDispose]();
+createScope(container).resolve(Connection);
+await dc[Symbol.asyncDispose]();
 // => "Connection closed"
 ```
 
 `await using`을 사용하면 블록 끝에서 스코프가 자동으로 폐기됩니다:
 
 ```ts
-import { createScope } from 'katagami/scope';
+import { createContainer, createScope } from 'katagami';
 import { disposable } from 'katagami/disposable';
 
 const root = createContainer()
@@ -356,25 +359,23 @@ const root = createContainer()
 
 스코프 폐기는 Scoped 인스턴스에만 영향을 줍니다. Singleton 인스턴스는 루트 컨테이너가 소유하며, 컨테이너 자체가 폐기될 때 폐기됩니다.
 
-`disposable()` 래퍼는 반환 타입도 좁혀서 등록 메서드(`registerSingleton`, `registerTransient`, `registerScoped`, `use`)를 타입 수준에서 제거합니다. 이를 통해 폐기될 수 있는 컨테이너에 대한 실수로 인한 등록을 방지합니다:
+`disposable()` 래퍼는 반환 타입도 좁혀서 등록 메서드(`registerSingleton`, `registerTransient`, `registerScoped`, `use`)를 타입 수준에서 제거합니다. 이를 통해 폐기될 수 있는 컨테이너에 대한 실수로 인한 등록을 방지합니다. `DisposableContainer`에서는 등록 메서드가 숨겨집니다:
 
 ```ts
-const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
+const dc = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
 
-container.resolve(Connection); // OK
-container.registerSingleton(/* ... */); // 컴파일 시 오류
+dc.registerSingleton(/* ... */); // 컴파일 시 오류
 ```
 
 ### Tree Shaking
 
-Katagami는 서브패스 익스포트를 사용하여 기능을 독립적인 진입점으로 분할합니다. 코어 컨테이너만 필요한 경우, `katagami/scope`, `katagami/disposable`, `katagami/lazy`는 번들에서 완전히 제외됩니다. 패키지는 `sideEffects: false`를 선언하므로 번들러가 미사용 코드를 안전하게 제거할 수 있습니다.
+Katagami는 서브패스 익스포트를 사용하여 기능을 독립적인 진입점으로 분할합니다. 코어 컨테이너만 필요한 경우, `katagami/disposable`, `katagami/lazy`는 번들에서 완전히 제외됩니다. 패키지는 `sideEffects: false`를 선언하므로 번들러가 미사용 코드를 안전하게 제거할 수 있습니다.
 
 ```ts
-// 코어만 — scope, disposable, lazy는 번들에 포함되지 않음
-import { createContainer } from 'katagami';
+// 코어만 — disposable, lazy는 번들에 포함되지 않음
+import { createContainer, createScope } from 'katagami';
 
 // 필요한 것만 임포트
-import { createScope } from 'katagami/scope';
 import { disposable } from 'katagami/disposable';
 import { lazy } from 'katagami/lazy';
 ```
@@ -384,7 +385,7 @@ import { lazy } from 'katagami/lazy';
 `createContainer<T>()`에 인터페이스를 전달하면 PropertyKey 토큰의 타입이 체이닝 축적이 아닌 인터페이스에서 결정됩니다. 따라서 토큰을 임의의 순서로 등록하고 해석할 수 있습니다:
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Logger {
 	log(msg: string) {
@@ -405,7 +406,7 @@ const container = createContainer<Services>()
 	})
 	.registerSingleton('logger', () => new Logger());
 
-const greeting = container.resolve('greeting');
+const greeting = createScope(container).resolve('greeting');
 //    ^? string
 ```
 
@@ -453,8 +454,7 @@ const container = createContainer()
 Katagami는 스코프 내에서 이 규칙을 런타임에도 적용합니다. Singleton 팩토리가 Scoped 토큰을 직접 또는 간접적으로 해석하려고 하면 `ContainerError`가 throw됩니다:
 
 ```ts
-import { createContainer } from 'katagami';
-import { createScope } from 'katagami/scope';
+import { createContainer, createScope } from 'katagami';
 
 class DbPool {}
 class RequestContext {}
@@ -473,7 +473,7 @@ scope.resolve(DbPool);
 선택적 의존성을 처리하거나 오류 없이 토큰이 등록되었는지 확인하려면 `tryResolve`를 사용하세요. `resolve`와 달리 미등록 토큰에 대해 `ContainerError`를 throw하는 대신 `undefined`를 반환합니다:
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Logger {
 	log(msg: string) {
@@ -488,12 +488,13 @@ class Analytics {
 }
 
 const container = createContainer().registerSingleton(Logger, () => new Logger());
+const scope = createScope(container);
 
 // resolve는 미등록 토큰에 대해 throw
-container.resolve(Analytics); // ContainerError: Token "Analytics" is not registered.
+scope.resolve(Analytics); // ContainerError: Token "Analytics" is not registered.
 
 // tryResolve는 미등록 토큰에 대해 undefined 반환
-const analytics = container.tryResolve(Analytics);
+const analytics = scope.tryResolve(Analytics);
 //    ^? Analytics | undefined
 if (analytics) {
 	analytics.track('event');
@@ -525,7 +526,7 @@ const container = createContainer()
 `katagami/lazy`의 `lazy()` 함수는 첫 번째 프로퍼티 접근까지 인스턴스 생성을 지연하는 프록시를 생성합니다. 시작 시간 최적화나 순환 의존성 해소에 유용합니다.
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 import { lazy } from 'katagami/lazy';
 
 class HeavyService {
@@ -538,8 +539,9 @@ class HeavyService {
 }
 
 const container = createContainer().registerSingleton(HeavyService, () => new HeavyService());
+const scope = createScope(container);
 
-const service = lazy(container, HeavyService);
+const service = lazy(scope, HeavyService);
 // HeavyService는 아직 인스턴스화되지 않음
 
 service.process(); // 여기서 인스턴스가 생성되고 캐시됨
@@ -550,11 +552,9 @@ service.process(); // 캐시된 인스턴스 사용
 
 **동기 클래스 토큰만 지원**됩니다. Proxy 트랩은 동기적이므로 비동기 토큰과 PropertyKey 토큰은 타입 수준에서 거부됩니다.
 
-`lazy()`는 Container, Scope, DisposableContainer, DisposableScope 모두에서 동작합니다:
+`lazy()`는 Scope, DisposableScope에서 동작합니다:
 
 ```ts
-import { createScope } from 'katagami/scope';
-
 const root = createContainer().registerScoped(RequestContext, () => new RequestContext());
 const scope = createScope(root);
 
@@ -583,17 +583,9 @@ const ctx = lazy(scope, RequestContext); // 지연된 Scoped 해석
 
 `source`(다른 `Container`)의 모든 등록을 이 컨테이너에 복사합니다. 팩토리와 라이프타임 항목만 복사되며, 싱글톤 인스턴스 캐시는 공유되지 않습니다. 메서드 체이닝을 위해 컨테이너를 반환합니다.
 
-### `Container.prototype.resolve(token)`
+### `createScope(source)`
 
-주어진 토큰의 인스턴스를 해석하여 반환합니다. 토큰이 미등록이거나 순환 의존성이 감지되면 `ContainerError`를 throw합니다.
-
-### `Container.prototype.tryResolve(token)`
-
-주어진 토큰의 인스턴스 해석을 시도합니다. 토큰이 미등록이면 throw하는 대신 `undefined`를 반환합니다. 순환 의존성이나 폐기된 컨테이너/스코프 작업에 대해서는 여전히 `ContainerError`를 throw합니다.
-
-### `createScope(source)` — `katagami/scope`
-
-`Container` 또는 기존 `Scope`에서 새로운 `Scope`(자식 컨테이너)를 생성합니다.
+`Container` 또는 기존 `Scope`에서 새로운 `Scope`(자식 컨테이너)를 생성합니다. 스코프는 소스의 모든 등록을 상속합니다. Singleton 인스턴스는 부모와 공유되며, Scoped 인스턴스는 해당 스코프에 로컬입니다.
 
 ### `class Scope`
 
@@ -601,7 +593,7 @@ const ctx = lazy(scope, RequestContext); // 지연된 Scoped 해석
 
 ### `Scope.prototype.resolve(token)`
 
-주어진 토큰의 인스턴스를 해석하여 반환합니다. `Container.prototype.resolve`와 동일하게 동작하지만 Scoped 토큰도 해석할 수 있습니다.
+주어진 토큰의 인스턴스를 해석하여 반환합니다. 토큰이 미등록이거나 순환 의존성이 감지되면 `ContainerError`를 throw합니다. 비 Scoped 토큰과 Scoped 토큰 모두 해석할 수 있습니다.
 
 ### `Scope.prototype.tryResolve(token)`
 
@@ -609,11 +601,11 @@ const ctx = lazy(scope, RequestContext); // 지연된 Scoped 해석
 
 ### `lazy(source, token)` — `katagami/lazy`
 
-`resolve()`를 첫 번째 프로퍼티 접근까지 지연하는 Proxy를 생성합니다. 해석된 인스턴스는 캐시되어 이후 접근 시 캐시를 사용합니다. 동기 클래스 토큰만 지원합니다. 비동기 토큰 및 PropertyKey 토큰은 타입 수준에서 거부됩니다. `Container`, `Scope`, `DisposableContainer`, `DisposableScope`에서 동작합니다.
+`resolve()`를 첫 번째 프로퍼티 접근까지 지연하는 Proxy를 생성합니다. 해석된 인스턴스는 캐시되어 이후 접근 시 캐시를 사용합니다. 동기 클래스 토큰만 지원합니다. 비동기 토큰 및 PropertyKey 토큰은 타입 수준에서 거부됩니다. `Scope`, `DisposableScope`에서 동작합니다.
 
 ### `disposable(container)` — `katagami/disposable`
 
-`Container` 또는 `Scope`에 `[Symbol.asyncDispose]`를 부착하여 `await using` 구문을 사용할 수 있게 합니다. 모든 관리 대상 인스턴스를 생성 역순(LIFO)으로 폐기합니다. 각 인스턴스의 `[Symbol.asyncDispose]()` 또는 `[Symbol.dispose]()`를 호출합니다. 멱등 — 이후 호출은 아무 작업도 하지 않습니다. 폐기 후 `resolve()`는 `ContainerError`를 throw합니다. 반환 타입은 `DisposableContainer` 또는 `DisposableScope`로 좁혀지며, `resolve`와 `tryResolve`만 노출됩니다 — 등록 메서드는 타입 수준에서 제거됩니다.
+`Container` 또는 `Scope`에 `[Symbol.asyncDispose]`를 부착하여 `await using` 구문을 사용할 수 있게 합니다. 모든 관리 대상 인스턴스를 생성 역순(LIFO)으로 폐기합니다. 각 인스턴스의 `[Symbol.asyncDispose]()` 또는 `[Symbol.dispose]()`를 호출합니다. 멱등 — 이후 호출은 아무 작업도 하지 않습니다. 폐기 후 `resolve()`와 `createScope()`는 `ContainerError`를 throw합니다. 반환 타입은 `DisposableContainer` 또는 `DisposableScope`로 좁혀집니다. `DisposableContainer`는 폐기 기능만 노출하며 — 등록 및 해석 메서드는 제외됩니다. `DisposableScope`는 `resolve`, `tryResolve`, `resolveAll`, `tryResolveAll`을 유지합니다.
 
 ### `class ContainerError`
 

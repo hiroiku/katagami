@@ -3,4 +3,4 @@ export type { DisposableContainer, DisposableScope, disposable } from './disposa
 export { ContainerError } from './error';
 export type { lazy } from './lazy';
 export type { Resolver } from './resolver';
-export type { createScope, Scope } from './scope';
+export { createScope, Scope } from './scope';

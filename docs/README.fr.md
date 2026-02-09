@@ -16,7 +16,7 @@ Conteneur DI léger pour TypeScript avec inférence de types complète.
 | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | Zéro dépendance                       | Pas de décorateurs, pas de reflect-metadata, pas de polyfills — fonctionne avec n'importe quel bundler sans configuration              |
 | Inférence de types complète           | Les types s'accumulent par chaînage de méthodes ; les tokens non enregistrés provoquent des erreurs à la compilation                   |
-| Tree-shakeable                        | Exports par sous-chemin (`katagami/scope`, `katagami/disposable`) et `sideEffects: false` pour une taille de bundle minimale           |
+| Tree-shakeable                        | Exports par sous-chemin (`katagami/disposable`, `katagami/lazy`) et `sideEffects: false` pour une taille de bundle minimale            |
 | Prévention des dépendances captives   | Les factories Singleton/Transient ne peuvent pas accéder aux tokens Scoped ; détecté à la compilation et à l'exécution dans les scopes |
 | Stratégie de tokens hybride           | Tokens de classe pour une sécurité de types stricte, tokens PropertyKey pour la flexibilité                                            |
 | Carte de types par interface          | Passez une interface à `createContainer<T>()` pour un enregistrement indépendant de l'ordre                                            |
@@ -37,7 +37,7 @@ npm install katagami
 ## Démarrage rapide
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Logger {
 	log(msg: string) {
@@ -56,7 +56,7 @@ const container = createContainer()
 	.registerSingleton(Logger, () => new Logger())
 	.registerSingleton(UserService, r => new UserService(r.resolve(Logger)));
 
-const userService = container.resolve(UserService);
+const userService = createScope(container).resolve(UserService);
 //    ^? UserService (entièrement inféré)
 userService.greet('world');
 ```
@@ -94,14 +94,13 @@ La DI basée sur les décorateurs nécessite les options du compilateur `experim
 
 ### Tree-shakeable
 
-Katagami est divisé en exports par sous-chemin. Importez uniquement ce dont vous avez besoin — `katagami/scope`, `katagami/disposable` et `katagami/lazy` sont complètement éliminés du bundle s'ils ne sont pas importés. Combiné avec `sideEffects: false`, les bundlers peuvent supprimer chaque octet inutilisé.
+Katagami est divisé en exports par sous-chemin. Importez uniquement ce dont vous avez besoin — `katagami/disposable` et `katagami/lazy` sont complètement éliminés du bundle s'ils ne sont pas importés. Combiné avec `sideEffects: false`, les bundlers peuvent supprimer chaque octet inutilisé.
 
 ```ts
-// Noyau uniquement — scope, disposable et lazy ne sont pas inclus dans le bundle
-import { createContainer } from 'katagami';
+// Noyau uniquement — disposable et lazy ne sont pas inclus dans le bundle
+import { createContainer, createScope } from 'katagami';
 
 // Importez uniquement ce dont vous avez besoin
-import { createScope } from 'katagami/scope';
 import { disposable } from 'katagami/disposable';
 import { lazy } from 'katagami/lazy';
 ```
@@ -129,7 +128,7 @@ Aucune dépendance à l'exécution, aucun polyfill. Pas besoin d'ajouter reflect
 Singleton crée l'instance au premier `resolve` et la met en cache. Transient crée une nouvelle instance à chaque fois.
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Database {
 	constructor(public id = Math.random()) {}
@@ -143,20 +142,21 @@ const container = createContainer()
 	.registerSingleton(Database, () => new Database())
 	.registerTransient(RequestHandler, () => new RequestHandler());
 
+const scope = createScope(container);
+
 // Singleton — toujours la même instance
-container.resolve(Database) === container.resolve(Database); // true
+scope.resolve(Database) === scope.resolve(Database); // true
 
 // Transient — nouvelle instance à chaque fois
-container.resolve(RequestHandler) === container.resolve(RequestHandler); // false
+scope.resolve(RequestHandler) === scope.resolve(RequestHandler); // false
 ```
 
 ### Cycle de vie Scoped et conteneurs enfants
 
-Les enregistrements Scoped se comportent comme des singletons au sein d'un scope mais produisent une instance fraîche dans chaque nouveau scope. Importez `createScope` depuis `katagami/scope` pour créer un conteneur enfant. Les tokens Scoped ne peuvent pas être résolus depuis le conteneur racine.
+Les enregistrements Scoped se comportent comme des singletons au sein d'un scope mais produisent une instance fraîche dans chaque nouveau scope. Utilisez `createScope` pour créer un conteneur enfant. Les tokens Scoped ne peuvent pas être résolus depuis le conteneur racine.
 
 ```ts
-import { createContainer } from 'katagami';
-import { createScope } from 'katagami/scope';
+import { createContainer, createScope } from 'katagami';
 
 class DbPool {
 	constructor(public name = 'main') {}
@@ -247,7 +247,7 @@ const container = createContainer().use(appModule);
 Les factories qui retournent une `Promise` sont automatiquement suivies par le système de types. Quand vous résolvez un token asynchrone, le type de retour est `Promise<V>` au lieu de `V` :
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Database {
 	constructor(public connected: boolean) {}
@@ -266,10 +266,12 @@ const container = createContainer()
 		return new Database(true);
 	});
 
-const logger = container.resolve(Logger);
+const scope = createScope(container);
+
+const logger = scope.resolve(Logger);
 //    ^? Logger
 
-const db = await container.resolve(Database);
+const db = await scope.resolve(Database);
 //    ^? Promise<Database>  (après await → Database)
 db.connected; // true
 ```
@@ -291,7 +293,7 @@ const container = createContainer()
 Katagami suit les tokens en cours de résolution. Si une dépendance circulaire est trouvée, une `ContainerError` est levée avec un message clair montrant le chemin complet du cycle :
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class ServiceA {
 	constructor(public b: ServiceB) {}
@@ -305,7 +307,7 @@ const container = createContainer()
 	.registerSingleton(ServiceA, r => new ServiceA(r.resolve(ServiceB)))
 	.registerSingleton(ServiceB, r => new ServiceB(r.resolve(ServiceA)));
 
-container.resolve(ServiceA);
+createScope(container).resolve(ServiceA);
 // ContainerError: Circular dependency detected: ServiceA -> ServiceB -> ServiceA
 ```
 
@@ -320,7 +322,7 @@ ContainerError: Circular dependency detected: ServiceX -> ServiceY -> ServiceZ -
 La suppression est fournie par le wrapper `disposable()` de `katagami/disposable`. Envelopper un conteneur ou un scope lui attache `[Symbol.asyncDispose]`, permettant la syntaxe `await using`. Lors de la suppression, les instances gérées sont parcourues dans l'ordre inverse de création (LIFO) et leurs méthodes `[Symbol.asyncDispose]()` ou `[Symbol.dispose]()` sont appelées automatiquement.
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 import { disposable } from 'katagami/disposable';
 
 class Connection {
@@ -330,17 +332,18 @@ class Connection {
 }
 
 // Suppression manuelle
-const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
+const container = createContainer().registerSingleton(Connection, () => new Connection());
+const dc = disposable(container);
 
-container.resolve(Connection);
-await container[Symbol.asyncDispose]();
+createScope(container).resolve(Connection);
+await dc[Symbol.asyncDispose]();
 // => "Connection closed"
 ```
 
 Avec `await using`, les scopes sont automatiquement supprimés à la fin du bloc :
 
 ```ts
-import { createScope } from 'katagami/scope';
+import { createContainer, createScope } from 'katagami';
 import { disposable } from 'katagami/disposable';
 
 const root = createContainer()
@@ -359,10 +362,9 @@ La suppression du scope n'affecte que les instances Scoped. Les instances Single
 Le wrapper `disposable()` restreint également le type de retour, supprimant les méthodes d'enregistrement (`registerSingleton`, `registerTransient`, `registerScoped`, `use`) au niveau des types. Cela empêche les enregistrements accidentels sur un conteneur potentiellement disposé :
 
 ```ts
-const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
+const dc = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
 
-container.resolve(Connection); // OK
-container.registerSingleton(/* ... */); // Erreur à la compilation
+dc.registerSingleton(/* ... */); // Erreur à la compilation
 ```
 
 ### Résolution différée (Lazy Resolution)
@@ -370,7 +372,7 @@ container.registerSingleton(/* ... */); // Erreur à la compilation
 La fonction `lazy()` de `katagami/lazy` crée un proxy qui diffère la création d'instance jusqu'au premier accès à une propriété. C'est utile pour optimiser le temps de démarrage ou résoudre les dépendances circulaires.
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 import { lazy } from 'katagami/lazy';
 
 class HeavyService {
@@ -384,7 +386,9 @@ class HeavyService {
 
 const container = createContainer().registerSingleton(HeavyService, () => new HeavyService());
 
-const service = lazy(container, HeavyService);
+const scope = createScope(container);
+
+const service = lazy(scope, HeavyService);
 // HeavyService n'est PAS encore instancié
 
 service.process(); // instance créée ici, puis mise en cache
@@ -395,11 +399,9 @@ Le proxy transfère de manière transparente tous les accès aux propriétés, a
 
 Seuls les **tokens de classe synchrones** sont supportés. Les tokens asynchrones et les tokens PropertyKey sont rejetés au niveau des types car les traps de Proxy sont synchrones.
 
-`lazy()` fonctionne avec Container, Scope, DisposableContainer et DisposableScope :
+`lazy()` fonctionne avec Scope et DisposableScope :
 
 ```ts
-import { createScope } from 'katagami/scope';
-
 const root = createContainer().registerScoped(RequestContext, () => new RequestContext());
 const scope = createScope(root);
 
@@ -408,14 +410,13 @@ const ctx = lazy(scope, RequestContext); // résolution scoped différée
 
 ### Tree Shaking
 
-Katagami utilise des exports par sous-chemin pour diviser les fonctionnalités en points d'entrée indépendants. Si vous n'avez besoin que du conteneur principal, `katagami/scope`, `katagami/disposable` et `katagami/lazy` sont complètement exclus du bundle. Le paquet déclare `sideEffects: false`, permettant aux bundlers de supprimer en toute sécurité tout code inutilisé.
+Katagami utilise des exports par sous-chemin pour diviser les fonctionnalités en points d'entrée indépendants. Si vous n'avez besoin que du conteneur principal, `katagami/disposable` et `katagami/lazy` sont complètement exclus du bundle. Le paquet déclare `sideEffects: false`, permettant aux bundlers de supprimer en toute sécurité tout code inutilisé.
 
 ```ts
-// Noyau uniquement — scope, disposable et lazy ne sont pas inclus dans le bundle
-import { createContainer } from 'katagami';
+// Noyau uniquement — disposable et lazy ne sont pas inclus dans le bundle
+import { createContainer, createScope } from 'katagami';
 
 // Importez uniquement ce dont vous avez besoin
-import { createScope } from 'katagami/scope';
 import { disposable } from 'katagami/disposable';
 import { lazy } from 'katagami/lazy';
 ```
@@ -425,7 +426,7 @@ import { lazy } from 'katagami/lazy';
 Quand vous passez une interface à `createContainer<T>()`, les tokens PropertyKey sont typés depuis l'interface plutôt qu'accumulés par chaînage. Cela signifie que vous pouvez enregistrer et résoudre des tokens dans n'importe quel ordre :
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Logger {
 	log(msg: string) {
@@ -446,7 +447,7 @@ const container = createContainer<Services>()
 	})
 	.registerSingleton('logger', () => new Logger());
 
-const greeting = container.resolve('greeting');
+const greeting = createScope(container).resolve('greeting');
 //    ^? string
 ```
 
@@ -494,8 +495,7 @@ const container = createContainer()
 Katagami applique également cette règle à l'exécution dans les scopes. Si une factory singleton tente de résoudre un token Scoped — directement ou via des intermédiaires — une `ContainerError` est levée :
 
 ```ts
-import { createContainer } from 'katagami';
-import { createScope } from 'katagami/scope';
+import { createContainer, createScope } from 'katagami';
 
 class DbPool {}
 class RequestContext {}
@@ -531,15 +531,7 @@ Enregistre une factory en tant que scoped. Au sein d'un scope, l'instance est cr
 
 Copie tous les enregistrements de `source` (un autre `Container`) dans ce conteneur. Seuls les entrées de factory et de cycle de vie sont copiés — les caches d'instances singleton ne sont pas partagés. Retourne le conteneur pour le chaînage de méthodes.
 
-### `Container.prototype.resolve(token)`
-
-Résout et retourne l'instance pour le token donné. Lève une `ContainerError` si le token n'est pas enregistré ou si une dépendance circulaire est détectée.
-
-### `Container.prototype.tryResolve(token)`
-
-Tente de résoudre l'instance pour le token donné. Retourne `undefined` si le token n'est pas enregistré, au lieu de lever une exception. Lève toujours une `ContainerError` pour les dépendances circulaires ou les opérations sur des conteneurs/scopes supprimés.
-
-### `createScope(source)` — `katagami/scope`
+### `createScope(source)`
 
 Crée un nouveau `Scope` (conteneur enfant) à partir d'un `Container` ou d'un `Scope` existant.
 
@@ -549,7 +541,7 @@ Un conteneur enfant avec scope créé par `createScope()`.
 
 ### `Scope.prototype.resolve(token)`
 
-Résout et retourne l'instance pour le token donné. Se comporte de la même manière que `Container.prototype.resolve`, mais peut également résoudre les tokens Scoped.
+Résout et retourne l'instance pour le token donné. Lève une `ContainerError` si le token n'est pas enregistré ou si une dépendance circulaire est détectée. Peut également résoudre les tokens Scoped.
 
 ### `Scope.prototype.tryResolve(token)`
 
@@ -557,11 +549,11 @@ Tente de résoudre l'instance pour le token donné. Retourne `undefined` si le t
 
 ### `lazy(source, token)` — `katagami/lazy`
 
-Crée un Proxy qui diffère `resolve()` jusqu'au premier accès à une propriété. L'instance résolue est mise en cache — les accès suivants utilisent le cache. Seuls les tokens de classe synchrones sont supportés ; les tokens asynchrones et PropertyKey sont rejetés au niveau des types. Fonctionne avec `Container`, `Scope`, `DisposableContainer` et `DisposableScope`.
+Crée un Proxy qui diffère `resolve()` jusqu'au premier accès à une propriété. L'instance résolue est mise en cache — les accès suivants utilisent le cache. Seuls les tokens de classe synchrones sont supportés ; les tokens asynchrones et PropertyKey sont rejetés au niveau des types. Fonctionne avec `Scope` et `DisposableScope`.
 
 ### `disposable(container)` — `katagami/disposable`
 
-Attache `[Symbol.asyncDispose]` à un `Container` ou `Scope`, permettant la syntaxe `await using`. Supprime toutes les instances gérées dans l'ordre inverse de création (LIFO). Appelle `[Symbol.asyncDispose]()` ou `[Symbol.dispose]()` sur chaque instance qui les implémente. Idempotent — les appels suivants sont sans effet. Après la suppression, `resolve()` lèvera une `ContainerError`. Le type de retour est restreint à `DisposableContainer` ou `DisposableScope`, qui n'exposent que `resolve` et `tryResolve` — les méthodes d'enregistrement sont supprimées au niveau des types.
+Attache `[Symbol.asyncDispose]` à un `Container` ou `Scope`, permettant la syntaxe `await using`. Supprime toutes les instances gérées dans l'ordre inverse de création (LIFO). Appelle `[Symbol.asyncDispose]()` ou `[Symbol.dispose]()` sur chaque instance qui les implémente. Idempotent — les appels suivants sont sans effet. Après la suppression, `resolve()` lèvera une `ContainerError`. `DisposableContainer` n'expose que la capacité de suppression — les méthodes d'enregistrement et de résolution sont exclues. `DisposableScope` conserve `resolve`, `tryResolve`, `resolveAll` et `tryResolveAll` pour la résolution.
 
 ### `class ContainerError`
 

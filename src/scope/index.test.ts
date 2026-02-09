@@ -103,20 +103,13 @@ describe('resolve (scoped)', () => {
 		expect(instance1).toBeInstanceOf(RequestContext);
 		expect(instance2).toBeInstanceOf(RequestContext);
 	});
-
-	test('throws ContainerError when resolving scoped token from root container', () => {
-		const container = createContainer().registerScoped(RequestContext, () => new RequestContext());
-		const resolve = (container as never as { resolve: (t: unknown) => unknown }).resolve.bind(container);
-		expect(() => resolve(RequestContext)).toThrow(ContainerError);
-		expect(() => resolve(RequestContext)).toThrow('Cannot resolve scoped token');
-		expect(() => resolve(RequestContext)).toThrow('createScope()');
-	});
 });
 
 describe('scoped + singleton interaction', () => {
 	test('scope returns the same singleton as the parent container', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const rootInstance = container.resolve(ServiceA);
+		const rootScope = createScope(container);
+		const rootInstance = rootScope.resolve(ServiceA);
 		const scope = createScope(container);
 		const scopeInstance = scope.resolve(ServiceA);
 		expect(scopeInstance).toBe(rootInstance);
@@ -126,7 +119,8 @@ describe('scoped + singleton interaction', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
 		const scope = createScope(container);
 		const scopeInstance = scope.resolve(ServiceA);
-		const rootInstance = container.resolve(ServiceA);
+		const otherScope = createScope(container);
+		const rootInstance = otherScope.resolve(ServiceA);
 		expect(scopeInstance).toBe(rootInstance);
 	});
 
@@ -379,7 +373,8 @@ describe('tryResolve (scoped)', () => {
 describe('tryResolve (scope + singleton)', () => {
 	test('returns the singleton from parent via tryResolve', () => {
 		const container = createContainer().registerSingleton(ServiceA, () => new ServiceA());
-		const rootInstance = container.resolve(ServiceA);
+		const rootScope = createScope(container);
+		const rootInstance = rootScope.resolve(ServiceA);
 		const scope = createScope(container);
 		const scopeInstance = scope.tryResolve(ServiceA);
 		expect(scopeInstance).toBe(rootInstance);

@@ -34,7 +34,8 @@ class FailingDisposableService {
 describe('Container [Symbol.asyncDispose]', () => {
 	test('calls [Symbol.dispose]() on singleton instances', async () => {
 		const container = disposable(createContainer().registerSingleton(DisposableService, () => new DisposableService()));
-		const instance = container.resolve(DisposableService);
+		const scope = createScope(container);
+		const instance = scope.resolve(DisposableService);
 		expect(instance.disposed).toBe(false);
 
 		await container[Symbol.asyncDispose]();
@@ -45,7 +46,8 @@ describe('Container [Symbol.asyncDispose]', () => {
 		const container = disposable(
 			createContainer().registerSingleton(AsyncDisposableService, () => new AsyncDisposableService()),
 		);
-		const instance = container.resolve(AsyncDisposableService);
+		const scope = createScope(container);
+		const instance = scope.resolve(AsyncDisposableService);
 
 		await container[Symbol.asyncDispose]();
 		expect(instance.disposed).toBe(true);
@@ -72,8 +74,9 @@ describe('Container [Symbol.asyncDispose]', () => {
 				.registerSingleton(SecondService, () => new SecondService()),
 		);
 
-		container.resolve(FirstService);
-		container.resolve(SecondService);
+		const scope = createScope(container);
+		scope.resolve(FirstService);
+		scope.resolve(SecondService);
 
 		await container[Symbol.asyncDispose]();
 		expect(order).toEqual(['second', 'first']);
@@ -91,7 +94,8 @@ describe('Container [Symbol.asyncDispose]', () => {
 		const container = disposable(
 			createContainer().registerSingleton(CountingDisposable, () => new CountingDisposable()),
 		);
-		container.resolve(CountingDisposable);
+		const scope = createScope(container);
+		scope.resolve(CountingDisposable);
 
 		await container[Symbol.asyncDispose]();
 		await container[Symbol.asyncDispose]();
@@ -103,7 +107,8 @@ describe('Container [Symbol.asyncDispose]', () => {
 			createContainer().registerSingleton(AsyncDisposableService, async () => new AsyncDisposableService()),
 		);
 
-		const instance = await container.resolve(AsyncDisposableService);
+		const scope = createScope(container);
+		const instance = await scope.resolve(AsyncDisposableService);
 
 		await container[Symbol.asyncDispose]();
 		expect(instance.disposed).toBe(true);
@@ -116,8 +121,9 @@ describe('Container [Symbol.asyncDispose]', () => {
 				.registerSingleton(DisposableService, () => new DisposableService()),
 		);
 
-		container.resolve(FailingDisposableService);
-		const instance = container.resolve(DisposableService);
+		const scope = createScope(container);
+		scope.resolve(FailingDisposableService);
+		const instance = scope.resolve(DisposableService);
 
 		try {
 			await container[Symbol.asyncDispose]();
@@ -144,8 +150,9 @@ describe('Container [Symbol.asyncDispose] edge cases', () => {
 				.registerSingleton('num', () => 42),
 		);
 
-		container.resolve('str');
-		container.resolve('num');
+		const scope = createScope(container);
+		scope.resolve('str');
+		scope.resolve('num');
 
 		// Dispose should skip primitives without throwing
 		await container[Symbol.asyncDispose]();
@@ -170,8 +177,9 @@ describe('Container [Symbol.asyncDispose] edge cases', () => {
 				.registerSingleton(FailY, () => new FailY()),
 		);
 
-		container.resolve(FailX);
-		container.resolve(FailY);
+		const scope = createScope(container);
+		scope.resolve(FailX);
+		scope.resolve(FailY);
 
 		try {
 			await container[Symbol.asyncDispose]();
@@ -185,15 +193,15 @@ describe('Container [Symbol.asyncDispose] edge cases', () => {
 });
 
 describe('disposed container guards', () => {
-	test('throws ContainerError when resolving from a disposed container', async () => {
+	test('throws ContainerError when creating scope from a disposed container', async () => {
 		const container = disposable(createContainer().registerSingleton(ServiceA, () => new ServiceA()));
 		await container[Symbol.asyncDispose]();
 
-		expect(() => container.resolve(ServiceA)).toThrow(ContainerError);
-		expect(() => container.resolve(ServiceA)).toThrow('disposed container');
+		expect(() => createScope(container)).toThrow(ContainerError);
+		expect(() => createScope(container)).toThrow('disposed container');
 	});
 
-	test('throws ContainerError when creating scope from a disposed container', async () => {
+	test('throws ContainerError when creating scope from a disposed container (no registrations)', async () => {
 		const container = disposable(createContainer());
 		await container[Symbol.asyncDispose]();
 
@@ -209,7 +217,8 @@ describe('await using integration (container)', () => {
 			await using container = disposable(
 				createContainer().registerSingleton(DisposableService, () => new DisposableService()),
 			);
-			instance = container.resolve(DisposableService);
+			const scope = createScope(container);
+			instance = scope.resolve(DisposableService);
 			expect(instance.disposed).toBe(false);
 		}
 
@@ -225,9 +234,10 @@ describe('Container transient disposal', () => {
 				.registerSingleton(AsyncDisposableService, () => new AsyncDisposableService()),
 		);
 
+		const scope = createScope(container);
 		// Resolve transient (not stored in ownInstances) and singleton (stored)
-		const transientInstance = container.resolve(DisposableService);
-		const singletonInstance = container.resolve(AsyncDisposableService);
+		const transientInstance = scope.resolve(DisposableService);
+		const singletonInstance = scope.resolve(AsyncDisposableService);
 
 		await container[Symbol.asyncDispose]();
 
@@ -254,7 +264,8 @@ describe('Container [Symbol.asyncDispose] preference', () => {
 		}
 
 		const container = disposable(createContainer().registerSingleton(BothDisposable, () => new BothDisposable()));
-		const instance = container.resolve(BothDisposable);
+		const scope = createScope(container);
+		const instance = scope.resolve(BothDisposable);
 
 		await container[Symbol.asyncDispose]();
 		expect(instance.asyncDisposed).toBe(true);
@@ -274,7 +285,8 @@ describe('disposable() double invocation', () => {
 		// Both references point to the same underlying container
 		expect(first).toBe(second);
 
-		const instance = second.resolve(DisposableService);
+		const scope = createScope(second);
+		const instance = scope.resolve(DisposableService);
 		await second[Symbol.asyncDispose]();
 		expect(instance.disposed).toBe(true);
 	});

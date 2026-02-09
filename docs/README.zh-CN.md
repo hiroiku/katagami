@@ -12,21 +12,21 @@
 
 ## 特性
 
-| 特性            | 说明                                                                                          |
-| --------------- | --------------------------------------------------------------------------------------------- |
-| 零依赖          | 无需装饰器、无需 reflect-metadata、无需 polyfill — 适用于任何构建工具，开箱即用               |
-| 完整的类型推断  | 类型随方法链积累；解析未注册的令牌会产生编译时错误                                            |
-| Tree Shaking    | 子路径导出（`katagami/scope`、`katagami/disposable`）配合 `sideEffects: false` 实现最小包体积 |
-| 捕获依赖防护    | Singleton/Transient 工厂无法访问 Scoped 令牌；在编译时及作用域内的运行时捕获                  |
-| 混合令牌策略    | 类令牌提供严格的类型安全，PropertyKey 令牌提供灵活性                                          |
-| 接口类型映射    | 向 `createContainer<T>()` 传入接口，实现与注册顺序无关的注册                                  |
-| 三种生命周期    | Singleton、Transient 和 Scoped（支持子容器）                                                  |
-| Disposable 支持 | TC39 显式资源管理（`Symbol.dispose` / `Symbol.asyncDispose` / `await using`）                 |
-| 模块组合        | 通过 `use()` 组合容器，将注册分组并重复使用                                                   |
-| 异步工厂        | 返回 Promise 的工厂会被类型系统自动追踪                                                       |
-| 循环依赖检测    | 包含完整循环路径的清晰错误消息                                                                |
-| 可选解析        | `tryResolve` 对未注册令牌返回 `undefined` 而非抛出异常                                        |
-| 延迟解析        | 通过 `katagami/lazy` 的 `lazy()` 实现基于 Proxy 的延迟实例化；首次访问时创建                  |
+| 特性            | 说明                                                                                         |
+| --------------- | -------------------------------------------------------------------------------------------- |
+| 零依赖          | 无需装饰器、无需 reflect-metadata、无需 polyfill — 适用于任何构建工具，开箱即用              |
+| 完整的类型推断  | 类型随方法链积累；解析未注册的令牌会产生编译时错误                                           |
+| Tree Shaking    | 子路径导出（`katagami/disposable`、`katagami/lazy`）配合 `sideEffects: false` 实现最小包体积 |
+| 捕获依赖防护    | Singleton/Transient 工厂无法访问 Scoped 令牌；在编译时及作用域内的运行时捕获                 |
+| 混合令牌策略    | 类令牌提供严格的类型安全，PropertyKey 令牌提供灵活性                                         |
+| 接口类型映射    | 向 `createContainer<T>()` 传入接口，实现与注册顺序无关的注册                                 |
+| 三种生命周期    | Singleton、Transient 和 Scoped（支持子容器）                                                 |
+| Disposable 支持 | TC39 显式资源管理（`Symbol.dispose` / `Symbol.asyncDispose` / `await using`）                |
+| 模块组合        | 通过 `use()` 组合容器，将注册分组并重复使用                                                  |
+| 异步工厂        | 返回 Promise 的工厂会被类型系统自动追踪                                                      |
+| 循环依赖检测    | 包含完整循环路径的清晰错误消息                                                               |
+| 可选解析        | `tryResolve` 对未注册令牌返回 `undefined` 而非抛出异常                                       |
+| 延迟解析        | 通过 `katagami/lazy` 的 `lazy()` 实现基于 Proxy 的延迟实例化；首次访问时创建                 |
 
 ## 安装
 
@@ -37,7 +37,7 @@ npm install katagami
 ## 快速开始
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Logger {
 	log(msg: string) {
@@ -56,7 +56,7 @@ const container = createContainer()
 	.registerSingleton(Logger, () => new Logger())
 	.registerSingleton(UserService, r => new UserService(r.resolve(Logger)));
 
-const userService = container.resolve(UserService);
+const userService = createScope(container).resolve(UserService);
 //    ^? UserService（完全推断）
 userService.greet('world');
 ```
@@ -94,14 +94,13 @@ userService.greet('world');
 
 ### Tree Shaking
 
-Katagami 通过子路径导出拆分功能。只需导入你使用的部分——如果不导入 `katagami/scope`、`katagami/disposable` 和 `katagami/lazy`，它们将从包中完全移除。配合 `sideEffects: false`，构建工具可以移除每一个未使用的字节。
+Katagami 通过子路径导出拆分功能。只需导入你使用的部分——如果不导入 `katagami/disposable` 和 `katagami/lazy`，它们将从包中完全移除。配合 `sideEffects: false`，构建工具可以移除每一个未使用的字节。
 
 ```ts
-// 仅核心 — scope、disposable 和 lazy 不会包含在包中
-import { createContainer } from 'katagami';
+// 仅核心 — disposable 和 lazy 不会包含在包中
+import { createContainer, createScope } from 'katagami';
 
 // 按需导入
-import { createScope } from 'katagami/scope';
 import { disposable } from 'katagami/disposable';
 import { lazy } from 'katagami/lazy';
 ```
@@ -129,7 +128,7 @@ import { lazy } from 'katagami/lazy';
 Singleton 在首次 `resolve` 时创建实例并缓存。Transient 每次都创建新实例。
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Database {
 	constructor(public id = Math.random()) {}
@@ -143,20 +142,21 @@ const container = createContainer()
 	.registerSingleton(Database, () => new Database())
 	.registerTransient(RequestHandler, () => new RequestHandler());
 
+const scope = createScope(container);
+
 // Singleton — 每次都是同一个实例
-container.resolve(Database) === container.resolve(Database); // true
+scope.resolve(Database) === scope.resolve(Database); // true
 
 // Transient — 每次都是新实例
-container.resolve(RequestHandler) === container.resolve(RequestHandler); // false
+scope.resolve(RequestHandler) === scope.resolve(RequestHandler); // false
 ```
 
 ### Scoped 生命周期与子容器
 
-Scoped 注册在作用域内表现得像 Singleton，但在每个新作用域中会产生新的实例。从 `katagami/scope` 导入 `createScope` 来创建子容器。Scoped 令牌无法从根容器解析。
+Scoped 注册在作用域内表现得像 Singleton，但在每个新作用域中会产生新的实例。使用 `createScope` 创建子容器。Scoped 令牌无法从根容器解析。
 
 ```ts
-import { createContainer } from 'katagami';
-import { createScope } from 'katagami/scope';
+import { createContainer, createScope } from 'katagami';
 
 class DbPool {
 	constructor(public name = 'main') {}
@@ -247,7 +247,7 @@ const container = createContainer().use(appModule);
 返回 `Promise` 的工厂会被类型系统自动追踪。当你 `resolve` 异步令牌时，返回类型是 `Promise<V>` 而非 `V`：
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Database {
 	constructor(public connected: boolean) {}
@@ -266,10 +266,12 @@ const container = createContainer()
 		return new Database(true);
 	});
 
-const logger = container.resolve(Logger);
+const scope = createScope(container);
+
+const logger = scope.resolve(Logger);
 //    ^? Logger
 
-const db = await container.resolve(Database);
+const db = await scope.resolve(Database);
 //    ^? Promise<Database>（await 后 → Database）
 db.connected; // true
 ```
@@ -291,7 +293,7 @@ const container = createContainer()
 Katagami 会追踪当前正在解析的令牌。如果发现循环依赖，将抛出包含完整循环路径的 `ContainerError`：
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class ServiceA {
 	constructor(public b: ServiceB) {}
@@ -305,7 +307,7 @@ const container = createContainer()
 	.registerSingleton(ServiceA, r => new ServiceA(r.resolve(ServiceB)))
 	.registerSingleton(ServiceB, r => new ServiceB(r.resolve(ServiceA)));
 
-container.resolve(ServiceA);
+createScope(container).resolve(ServiceA);
 // ContainerError: Circular dependency detected: ServiceA -> ServiceB -> ServiceA
 ```
 
@@ -320,7 +322,7 @@ ContainerError: Circular dependency detected: ServiceX -> ServiceY -> ServiceZ -
 销毁功能由 `katagami/disposable` 的 `disposable()` 包装器提供。包装容器或作用域会附加 `[Symbol.asyncDispose]`，启用 `await using` 语法。销毁时，托管实例按创建的逆序（LIFO）遍历，并自动调用其 `[Symbol.asyncDispose]()` 或 `[Symbol.dispose]()` 方法。
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 import { disposable } from 'katagami/disposable';
 
 class Connection {
@@ -330,17 +332,18 @@ class Connection {
 }
 
 // 手动销毁
-const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
+const container = createContainer().registerSingleton(Connection, () => new Connection());
+const dc = disposable(container);
 
-container.resolve(Connection);
-await container[Symbol.asyncDispose]();
+createScope(container).resolve(Connection);
+await dc[Symbol.asyncDispose]();
 // => "Connection closed"
 ```
 
 使用 `await using` 时，作用域在块结束时自动销毁：
 
 ```ts
-import { createScope } from 'katagami/scope';
+import { createContainer, createScope } from 'katagami';
 import { disposable } from 'katagami/disposable';
 
 const root = createContainer()
@@ -359,22 +362,20 @@ const root = createContainer()
 `disposable()` 包装器也会缩窄返回类型，在类型层面移除注册方法（`registerSingleton`、`registerTransient`、`registerScoped`、`use`）。这可以防止对可能已销毁的容器进行意外注册：
 
 ```ts
-const container = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
+const dc = disposable(createContainer().registerSingleton(Connection, () => new Connection()));
 
-container.resolve(Connection); // OK
-container.registerSingleton(/* ... */); // 编译时错误
+dc.registerSingleton(/* ... */); // 编译时错误
 ```
 
 ### Tree Shaking
 
-Katagami 使用子路径导出将功能拆分为独立的入口点。如果你只需要核心容器，`katagami/scope`、`katagami/disposable` 和 `katagami/lazy` 将从包中完全排除。包声明了 `sideEffects: false`，因此构建工具可以安全地移除任何未使用的代码。
+Katagami 使用子路径导出将功能拆分为独立的入口点。如果你只需要核心容器，`katagami/disposable` 和 `katagami/lazy` 将从包中完全排除。包声明了 `sideEffects: false`，因此构建工具可以安全地移除任何未使用的代码。
 
 ```ts
-// 仅核心 — scope、disposable 和 lazy 不会包含在包中
-import { createContainer } from 'katagami';
+// 仅核心 — disposable 和 lazy 不会包含在包中
+import { createContainer, createScope } from 'katagami';
 
 // 按需导入
-import { createScope } from 'katagami/scope';
 import { disposable } from 'katagami/disposable';
 import { lazy } from 'katagami/lazy';
 ```
@@ -384,7 +385,7 @@ import { lazy } from 'katagami/lazy';
 当你向 `createContainer<T>()` 传入接口时，PropertyKey 令牌的类型来源于接口而非通过链式积累。这意味着你可以以任意顺序注册和解析令牌：
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Logger {
 	log(msg: string) {
@@ -405,7 +406,7 @@ const container = createContainer<Services>()
 	})
 	.registerSingleton('logger', () => new Logger());
 
-const greeting = container.resolve('greeting');
+const greeting = createScope(container).resolve('greeting');
 //    ^? string
 ```
 
@@ -453,8 +454,7 @@ const container = createContainer()
 Katagami 也在作用域内的运行时强制执行此规则。如果 Singleton 工厂尝试直接或间接解析 Scoped 令牌，将抛出 `ContainerError`：
 
 ```ts
-import { createContainer } from 'katagami';
-import { createScope } from 'katagami/scope';
+import { createContainer, createScope } from 'katagami';
 
 class DbPool {}
 class RequestContext {}
@@ -473,7 +473,7 @@ scope.resolve(DbPool);
 当需要处理可选依赖或想在不抛出错误的情况下检查令牌是否已注册时，使用 `tryResolve`。与 `resolve` 不同，它对未注册的令牌返回 `undefined` 而不是抛出 `ContainerError`：
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 
 class Logger {
 	log(msg: string) {
@@ -488,12 +488,13 @@ class Analytics {
 }
 
 const container = createContainer().registerSingleton(Logger, () => new Logger());
+const scope = createScope(container);
 
 // resolve 对未注册令牌抛出异常
-container.resolve(Analytics); // ContainerError: Token "Analytics" is not registered.
+scope.resolve(Analytics); // ContainerError: Token "Analytics" is not registered.
 
 // tryResolve 对未注册令牌返回 undefined
-const analytics = container.tryResolve(Analytics);
+const analytics = scope.tryResolve(Analytics);
 //    ^? Analytics | undefined
 if (analytics) {
 	analytics.track('event');
@@ -525,7 +526,7 @@ const container = createContainer()
 `katagami/lazy` 的 `lazy()` 函数创建一个代理，将实例创建延迟到首次属性访问时。这对于优化启动时间或打破循环依赖很有用。
 
 ```ts
-import { createContainer } from 'katagami';
+import { createContainer, createScope } from 'katagami';
 import { lazy } from 'katagami/lazy';
 
 class HeavyService {
@@ -538,8 +539,9 @@ class HeavyService {
 }
 
 const container = createContainer().registerSingleton(HeavyService, () => new HeavyService());
+const scope = createScope(container);
 
-const service = lazy(container, HeavyService);
+const service = lazy(scope, HeavyService);
 // HeavyService 尚未被实例化
 
 service.process(); // 此处创建实例并缓存
@@ -550,11 +552,9 @@ service.process(); // 使用缓存的实例
 
 仅支持**同步类令牌**。由于 Proxy 陷阱是同步的，异步令牌和 PropertyKey 令牌在类型层面会被拒绝。
 
-`lazy()` 适用于 Container、Scope、DisposableContainer 和 DisposableScope：
+`lazy()` 适用于 Scope 和 DisposableScope：
 
 ```ts
-import { createScope } from 'katagami/scope';
-
 const root = createContainer().registerScoped(RequestContext, () => new RequestContext());
 const scope = createScope(root);
 
@@ -583,15 +583,7 @@ const ctx = lazy(scope, RequestContext); // 延迟的 Scoped 解析
 
 将 `source`（另一个 `Container`）的所有注册复制到此容器中。仅复制工厂和生命周期条目，不共享单例实例缓存。返回容器以支持方法链。
 
-### `Container.prototype.resolve(token)`
-
-解析并返回给定令牌的实例。如果令牌未注册或检测到循环依赖，则抛出 `ContainerError`。
-
-### `Container.prototype.tryResolve(token)`
-
-尝试解析给定令牌的实例。如果令牌未注册，返回 `undefined` 而不是抛出异常。对于循环依赖或已销毁容器/作用域的操作仍会抛出 `ContainerError`。
-
-### `createScope(source)` — `katagami/scope`
+### `createScope(source)`
 
 从 `Container` 或现有的 `Scope` 创建新的 `Scope`（子容器）。
 
@@ -601,7 +593,7 @@ const ctx = lazy(scope, RequestContext); // 延迟的 Scoped 解析
 
 ### `Scope.prototype.resolve(token)`
 
-解析并返回给定令牌的实例。与 `Container.prototype.resolve` 行为相同，但还可以解析 Scoped 令牌。
+解析并返回给定令牌的实例。如果令牌未注册或检测到循环依赖，则抛出 `ContainerError`。可以解析 Singleton、Transient 和 Scoped 令牌。
 
 ### `Scope.prototype.tryResolve(token)`
 
@@ -609,11 +601,11 @@ const ctx = lazy(scope, RequestContext); // 延迟的 Scoped 解析
 
 ### `lazy(source, token)` — `katagami/lazy`
 
-创建一个 Proxy，将 `resolve()` 延迟到首次属性访问。已解析的实例会被缓存——后续访问使用缓存。仅支持同步类令牌；异步令牌和 PropertyKey 令牌在类型层面被拒绝。适用于 `Container`、`Scope`、`DisposableContainer` 和 `DisposableScope`。
+创建一个 Proxy，将 `resolve()` 延迟到首次属性访问。已解析的实例会被缓存——后续访问使用缓存。仅支持同步类令牌；异步令牌和 PropertyKey 令牌在类型层面被拒绝。适用于 `Scope` 和 `DisposableScope`。
 
 ### `disposable(container)` — `katagami/disposable`
 
-为 `Container` 或 `Scope` 附加 `[Symbol.asyncDispose]`，启用 `await using` 语法。按创建的逆序（LIFO）销毁所有托管实例。调用每个实例的 `[Symbol.asyncDispose]()` 或 `[Symbol.dispose]()`。幂等——后续调用为空操作。销毁后，`resolve()` 将抛出 `ContainerError`。返回类型被缩窄为 `DisposableContainer` 或 `DisposableScope`，仅公开 `resolve` 和 `tryResolve` — 注册方法在类型层面被移除。
+为 `Container` 或 `Scope` 附加 `[Symbol.asyncDispose]`，启用 `await using` 语法。按创建的逆序（LIFO）销毁所有托管实例。调用每个实例的 `[Symbol.asyncDispose]()` 或 `[Symbol.dispose]()`。幂等——后续调用为空操作。销毁后，`resolve()` 将抛出 `ContainerError`。`DisposableContainer` 仅公开销毁功能——注册和解析方法均被排除。`DisposableScope` 保留 `resolve`、`tryResolve`、`resolveAll` 和 `tryResolveAll` 用于解析。
 
 ### `class ContainerError`
 
