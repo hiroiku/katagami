@@ -18,3 +18,8 @@ and explain the correction immediately. Do not silently relax the type checker t
 Maintain the distinction between accumulated tokens and predeclared interface maps, and between
 structural class compatibility and runtime token identity. Quantitative AI performance claims require
 the [evaluation evidence](./benchmarks/agent-wiring/README.md), including unsuccessful runs.
+
+Keep the library comparison and supported Katagami advantages in the README when changing its
+positioning. Refresh comparison dates, stable package versions and primary sources together;
+separate type inference, registration checks, runtime guards and application-level patterns.
+Keep localized comparison summaries aligned with [the comparison notes](./docs/choosing-di.md).

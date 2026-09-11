@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.2
+
+- Restore the README comparison with InversifyJS, tsyringe, TypeDI, Awilix, NestJS, Effect and typed-inject.
+- Review stable package versions and official sources on 2026-09-11; distinguish registration checks, scope policies, async services and cleanup.
+- Restore Katagami's advantages and localized comparison summaries, with linked sources and precise feature notes.
+- Keep runtime code and public APIs unchanged from 3.0.1.
+
 ## 3.0.1
 
 - Preserve accumulated token maps, class tokens and async types when creating scopes from disposable views.
