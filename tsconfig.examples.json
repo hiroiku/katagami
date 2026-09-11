@@ -1,0 +1,13 @@
+{
+	"extends": "./tsconfig.typecheck.json",
+	"compilerOptions": {
+		"rootDir": ".",
+		"paths": {
+			"katagami": ["./src/index.ts"],
+			"katagami/disposable": ["./src/disposable/index.ts"],
+			"katagami/lazy": ["./src/lazy/index.ts"]
+		}
+	},
+	"include": ["examples/**/*.ts"],
+	"exclude": []
+}

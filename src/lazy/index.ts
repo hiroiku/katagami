@@ -1,6 +1,6 @@
-import type { DisposableScope } from '../disposable';
-import type { AbstractConstructor } from '../resolver';
-import type { Scope } from '../scope';
+import type { DisposableScope } from '../disposable/index.js';
+import type { AbstractConstructor } from '../resolver/index.js';
+import type { Scope } from '../scope/index.js';
 
 /**
  * Create a lazy proxy that defers resolution until the first property access.

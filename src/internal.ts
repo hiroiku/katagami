@@ -1,11 +1,16 @@
-import type { Registration } from './resolver';
+import type { Registration } from './resolver/index.js';
 
 /**
  * Symbol used by extension modules (scope, disposable) to access container/scope internals.
  *
  * @internal
  */
-export const INTERNALS = Symbol('katagami.internals');
+// Bundled CommonJS entry points contain separate copies of this module. Use a
+// versioned shared key so core, disposable and mixed ESM/CJS imports interoperate.
+export const INTERNALS = Symbol.for('katagami.internals.v3');
+
+/** Type-only registration state retained by disposable views. No runtime property is emitted. */
+export declare const TYPE_STATE: unique symbol;
 
 /**
  * Internal state exposed via the INTERNALS symbol.

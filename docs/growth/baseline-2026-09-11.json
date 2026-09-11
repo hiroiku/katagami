@@ -1,0 +1,68 @@
+{
+	"collectedAt": "2026-09-11T10:53:46.834Z",
+	"package": "katagami",
+	"npm": {
+		"week": {
+			"downloads": 2,
+			"start": "2026-09-03",
+			"end": "2026-09-09",
+			"package": "katagami"
+		},
+		"month": {
+			"downloads": 109,
+			"start": "2026-08-11",
+			"end": "2026-09-09",
+			"package": "katagami"
+		},
+		"nonOverlappingWeeks": [
+			{
+				"start": "2026-07-16",
+				"end": "2026-07-22",
+				"downloads": 2
+			},
+			{
+				"start": "2026-07-23",
+				"end": "2026-07-29",
+				"downloads": 15
+			},
+			{
+				"start": "2026-07-30",
+				"end": "2026-08-05",
+				"downloads": 8
+			},
+			{
+				"start": "2026-08-06",
+				"end": "2026-08-12",
+				"downloads": 57
+			},
+			{
+				"start": "2026-08-13",
+				"end": "2026-08-19",
+				"downloads": 48
+			},
+			{
+				"start": "2026-08-20",
+				"end": "2026-08-26",
+				"downloads": 15
+			},
+			{
+				"start": "2026-08-27",
+				"end": "2026-09-02",
+				"downloads": 14
+			},
+			{
+				"start": "2026-09-03",
+				"end": "2026-09-09",
+				"downloads": 2
+			}
+		]
+	},
+	"github": {
+		"stars": 4,
+		"forks": 0,
+		"topics": [],
+		"homepage": null,
+		"pushedAt": "2026-02-09T11:30:14Z"
+	},
+	"errors": []
+}

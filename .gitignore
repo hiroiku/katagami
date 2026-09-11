@@ -1,8 +1,11 @@
 # Project
 node_modules/
 dist/
-bun.lock
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Local evaluation data
+benchmarks/agent-wiring/results.local.jsonl
+metrics.local/

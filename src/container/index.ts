@@ -1,5 +1,5 @@
-import { type ContainerInternals, INTERNALS } from '../internal';
-import type { AbstractConstructor, Lifetime, Registration, Resolver } from '../resolver';
+import { type ContainerInternals, INTERNALS } from '../internal.js';
+import type { AbstractConstructor, Lifetime, Registration, Resolver } from '../resolver/index.js';
 
 /**
  * Create a new DI container.

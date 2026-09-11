@@ -1,7 +1,7 @@
-import type { Container } from '../container';
-import { type ContainerInternals, INTERNALS } from '../internal';
-import type { AbstractConstructor, Resolver } from '../resolver';
-import type { Scope } from '../scope';
+import type { Container } from '../container/index.js';
+import { type ContainerInternals, INTERNALS, type TYPE_STATE } from '../internal.js';
+import type { AbstractConstructor, Resolver } from '../resolver/index.js';
+import type { Scope } from '../scope/index.js';
 
 /**
  * A container wrapped with `disposable()`.
@@ -18,14 +18,18 @@ import type { Scope } from '../scope';
  * @template ScopedAsync Union of scoped async class constructors
  */
 export interface DisposableContainer<
-	_T = Record<never, never>,
-	_Sync extends AbstractConstructor = never,
-	_Async extends AbstractConstructor = never,
-	_ScopedT = Record<never, never>,
-	_ScopedSync extends AbstractConstructor = never,
-	_ScopedAsync extends AbstractConstructor = never,
+	T = Record<never, never>,
+	Sync extends AbstractConstructor = never,
+	Async extends AbstractConstructor = never,
+	ScopedT = Record<never, never>,
+	ScopedSync extends AbstractConstructor = never,
+	ScopedAsync extends AbstractConstructor = never,
 > extends AsyncDisposable {
 	readonly [INTERNALS]: ContainerInternals;
+	readonly [TYPE_STATE]?: {
+		readonly kind: 'container';
+		readonly registrations: readonly [T, Sync, Async, ScopedT, ScopedSync, ScopedAsync];
+	};
 }
 
 /**
@@ -50,6 +54,10 @@ export interface DisposableScope<
 > extends Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>,
 		AsyncDisposable {
 	readonly [INTERNALS]: ContainerInternals;
+	readonly [TYPE_STATE]?: {
+		readonly kind: 'scope';
+		readonly registrations: readonly [T, Sync, Async, ScopedT, ScopedSync, ScopedAsync];
+	};
 }
 
 /**
