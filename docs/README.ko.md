@@ -33,7 +33,7 @@ console.log(greeting);
 
 | 라이브러리 / 버전 | 의존성 타입과 등록 확인 | 스코프 정책 |
 | --- | --- | --- |
-| **Katagami 3.0.2** | **리터럴·unique symbol 등록을 누적하고 미등록 필수 토큰 거부** | **Singleton·Transient 팩터리에서 Scoped 토큰을 타입으로 제외** |
+| **Katagami 3.0.3** | **리터럴·unique symbol 등록을 누적하고 미등록 필수 토큰 거부** | **Singleton·Transient 팩터리에서 Scoped 토큰을 타입으로 제외** |
 | InversifyJS 8.2.3 | 타입이 있는 binding, 등록 여부는 런타임 확인 | binding의 라이프타임 설정 |
 | tsyringe 4.10.0 | 클래스·제네릭 타입, 등록 여부는 런타임 확인 | 라이프타임 설정과 자식 컨테이너 |
 | TypeDI 0.10.0 | 클래스·`Token<T>`, 등록 여부는 런타임 확인 | 공유·Transient 서비스와 이름 있는 컨테이너 |

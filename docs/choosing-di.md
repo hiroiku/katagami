@@ -2,8 +2,8 @@
 
 Katagami is a strong fit when you want **registration-derived types, explicit request scopes and
 ordinary TypeScript factories without decorators or runtime dependencies**. The
-[README comparison](../README.md#library-comparison) covers all eight libraries, including their
-typing, setup, lifetimes, asynchronous behavior and cleanup. This guide records the evidence and
+[README comparison](../README.md#library-comparison) covers 27 features across eight libraries,
+including typing, setup, lifetimes, asynchronous behavior, cleanup and composition. This guide records the evidence and
 the features that need more explanation than a table cell.
 
 ## What distinguishes Katagami
@@ -37,7 +37,7 @@ typing, mutable aliases and predeclared-map boundaries.
 Reviewed **2026-09-11**. Competitor versions are the npm `latest` dist-tag versions observed on that date,
 not prerelease versions or unreleased features from repository default branches. TypeDI refers to
 the `typedi` package maintained under TypeStack, not similarly named forks. NestJS's version is
-the version of `@nestjs/core`. The comparison uses Effect **3** documentation explicitly. Katagami 3.0.2 is this documentation
+the version of `@nestjs/core`. The comparison uses Effect **3** documentation explicitly. Katagami 3.0.3 is this documentation
 release; its runtime and public APIs are unchanged from the reviewed 3.0.1 package.
 
 | Package | Reviewed version and registry metadata | Primary documentation / shipped API |
@@ -117,7 +117,7 @@ application code can implement the pattern; it does not claim a dedicated contai
 | --- | --- | --- |
 | Katagami | `tryResolve`, `resolveAll`, `tryResolveAll` | `use()` copies registrations; opt-in `lazy()`; ordinary higher-order factories |
 | InversifyJS | Optional get/inject, `getAll`, `getAllAsync` | Container modules/hierarchy, autobinding, contextual constraints, activation/deactivation, snapshot/restore |
-| tsyringe | Optional inject, `injectAll`, `resolveAll` | `@registry`, child containers, before/after resolution interceptors, `delay()` |
+| tsyringe | Optional inject, `injectAll`, `resolveAll` | `@registry`, child containers, before/after resolution interceptors, `delay()`, `predicateAwareClassFactory` |
 | TypeDI | `has` before `get`; `getMany` with multiple registrations | Named containers, factory configuration and service decorators |
 | Awilix | `allowUnregistered`; compose collections as values/factories | `loadModules`, child scopes, local injections and proxy/classic injection |
 | NestJS | Optional injection/provider dependencies; compose array providers | Modules/dynamic modules, provider overrides, discovery service and lazy modules |
@@ -130,6 +130,30 @@ substitution. Factory wrappers are an application pattern, not a middleware/inte
 Similarly, a lazy module loader is not the same feature as a proxy that constructs one service on
 first property access, and a resolution graph scope is not an HTTP request scope.
 
+The README retains all 18 original comparison aspects and adds nine more specific checks:
+registration-derived types, missing-token checking, compile-time scope restrictions, dependency
+packages, scoped lifetime behavior, async result typing, automatic awaiting, async cleanup and
+test substitution. Its three feature-by-library matrices use the same columns. ✅ means built-in
+support, ⚠️ marks a condition, different model or application composition, and ➖ means that the
+specific capability has no built-in support. The icons are not a total score.
+
+Additional API notes for the expanded rows:
+
+- tsyringe's release README documents `predicateAwareClassFactory` for conditional construction
+  and `delay()` for a proxy that constructs an instance on first use. Its circular-dependency
+  example reports an undefined constructor; that is narrower than a general graph cycle detector.
+- InversifyJS has a dedicated [snapshot API](https://inversify.io/docs/fundamentals/snapshot/).
+  Its activation/deactivation hooks are the extension mechanism shown here; the table does not
+  claim that the old `applyMiddleware` API exists in version 8. A deferred service identifier
+  delays reading a token, which is different from a proxy that delays constructing its service.
+- Effect 3's [layer memoization guide](https://effect.website/docs/v3/requirements-management/layer-memoization)
+  documents both shared layer construction and `Layer.fresh`. These are not container
+  Singleton/Transient registration flags. Typed requirements are not a claim of a general
+  runtime cycle detector.
+- Nest's `forwardRef` and TypeDI's deferred type references address reference timing. Neither
+  should be marked as equivalent to Katagami's lazy service proxy. A runtime cycle guard also
+  does not establish detection of every asynchronous deadlock.
+
 Start with the [runnable starter](../examples/request-scope/README.md) and
 [composition guide](./guide.md#composition-and-test-substitution). For a project already built on
 NestJS or Effect, adopting its existing DI model can be simpler than maintaining a second container.
@@ -137,6 +161,8 @@ NestJS or Effect, adopting its existing DI model can be simpler than maintaining
 ## Updating the comparison
 
 Preserve a comparison and Katagami's supported advantages in the README when editing positioning.
+Keep the feature-by-library layout, status icons and all existing comparison aspects when refreshing
+it; add detail rather than replacing the matrix with a smaller library-by-library summary.
 Refresh the date, npm dist-tag versions and official sources together. Check published declarations
 when a claim involves inference or registration guarantees, and distinguish built-in features from
 wrappers, configuration and framework behavior. Keep localized summaries aligned with the English

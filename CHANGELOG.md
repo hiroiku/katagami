@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.3
+
+- Expand the English and Japanese README comparison to 27 features across eight libraries, retaining all 18 original comparison aspects.
+- Restore feature rows, library columns and status icons, with Katagami's advantages emphasized and detailed conditions in expandable notes.
+- Document the sources and distinctions for the additional comparison rows, and align localized version labels.
+- Keep runtime code and public APIs unchanged from 3.0.2.
+
 ## 3.0.2
 
 - Restore the README comparison with InversifyJS, tsyringe, TypeDI, Awilix, NestJS, Effect and typed-inject.
