@@ -33,7 +33,7 @@ Katagami associe **types déduits des enregistrements, restrictions de portée �
 
 | Bibliothèque / version | Types et vérification des enregistrements | Politique de portée |
 | --- | --- | --- |
-| **Katagami 3.0.2** | **Accumule les tokens littéraux/unique symbol ; rejette les tokens requis non enregistrés** | **Exclut les tokens Scoped du résolveur des fabriques Singleton/Transient** |
+| **Katagami 3.0.3** | **Accumule les tokens littéraux/unique symbol ; rejette les tokens requis non enregistrés** | **Exclut les tokens Scoped du résolveur des fabriques Singleton/Transient** |
 | InversifyJS 8.2.3 | Bindings typés ; existence vérifiée à l'exécution | Durée de vie configurée par binding |
 | tsyringe 4.10.0 | Types de classe/génériques ; enregistrements vérifiés à l'exécution | Durées de vie et conteneurs enfants |
 | TypeDI 0.10.0 | Classes et `Token<T>` ; enregistrements vérifiés à l'exécution | Services partagés/Transient, conteneurs nommés |

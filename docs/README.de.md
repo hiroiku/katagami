@@ -33,7 +33,7 @@ Katagami verbindet **aus Registrierungen abgeleitete Typen, Scope-Prüfungen zur
 
 | Bibliothek / Version | Abhängigkeitstypen und Registrierungsprüfung | Scope-Verhalten |
 | --- | --- | --- |
-| **Katagami 3.0.2** | **Sammelt Literal-/unique-symbol-Tokens; fehlende erforderliche Tokens sind Typfehler** | **Scoped-Tokens im Resolver von Singleton-/Transient-Factories ausgeschlossen** |
+| **Katagami 3.0.3** | **Sammelt Literal-/unique-symbol-Tokens; fehlende erforderliche Tokens sind Typfehler** | **Scoped-Tokens im Resolver von Singleton-/Transient-Factories ausgeschlossen** |
 | InversifyJS 8.2.3 | Typisierte Bindings; Existenzprüfung zur Laufzeit | Konfigurierte Binding-Lebensdauer |
 | tsyringe 4.10.0 | Klassen-/generische Typen; Registrierungsprüfung zur Laufzeit | Lebensdauer und Kindcontainer |
 | TypeDI 0.10.0 | Klassen und `Token<T>`; Registrierungsprüfung zur Laufzeit | Geteilte/Transient-Services, benannte Container |

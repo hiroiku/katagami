@@ -57,43 +57,88 @@ These checks assume narrow tokens and preserved registration types; see the
 
 ### Library comparison
 
-Reviewed **2026-09-11**, against the npm `latest` versions below and official documentation.
-The tables describe the built-in APIs; add-ons and application-specific wrappers can change the
-trade-offs. [Version sources and detailed comparison notes](./docs/choosing-di.md#comparison-sources)
-explain the distinctions.
+**27 features across eight libraries.** Reviewed **2026-09-11**, against the npm `latest`
+versions shown below and official documentation. [Versions, sources and detailed notes](./docs/choosing-di.md#comparison-sources).
 
-| Library / reviewed version | Dependency typing and missing registrations | Scoped-dependency handling | DI setup |
-| --- | --- | --- | --- |
-| **Katagami 3.0.2** | **Accumulated literal/unique-symbol tokens; missing required tokens rejected** | **Scoped tokens excluded from singleton/transient factory resolvers** | **No decorators or metadata; zero runtime dependencies** |
-| [InversifyJS 8.2.3](https://inversify.io/docs/fundamentals/binding/) | Typed identifiers and bindings; binding existence checked at runtime | Declared binding scopes; not a scope-filtered resolver type | Metadata-based class injection; explicit value/factory bindings also available |
-| [tsyringe 4.10.0](https://github.com/microsoft/tsyringe#readme) | Class/generic resolution types; registrations checked at runtime | Runtime lifetime settings; factory receives the container | Decorators and a Reflect metadata polyfill for class injection |
-| [TypeDI 0.10.0](https://github.com/typestack/typedi/tree/v0.10.0) | Class and `Token<T>` types; registrations checked at runtime | Shared/transient services and named containers | Decorators and `reflect-metadata` in the TypeScript setup |
-| [Awilix 13.0.5](https://github.com/jeffijoe/awilix#readme) | Registration-derived cradle types; broad `resolve` overload still accepts unknown names | `strict: true` checks lifetime leaks at runtime | No decorators or metadata |
-| [NestJS 12.0.1](https://docs.nestjs.com/fundamentals/custom-providers) | Typed providers; module/provider graph resolved at runtime | Request scope propagates to dependent providers | Framework modules and metadata-based class injection |
-| [Effect 3.22.2](https://effect.website/docs/v3/requirements-management/layers) | Service requirements tracked in `Effect` / `Layer` types | Typed `Scope` requirements and resource finalizers; a different lifetime model | No decorators or metadata; Effect's service/layer model |
-| [typed-inject 5.0.0](https://github.com/nicojs/typed-inject#readme) | Accumulated string tokens and checked `inject` tuples | Singleton/transient providers and child injectors; no separate scoped lifetime | No decorators or metadata; zero runtime dependencies |
+**✅ Built-in support · ⚠️ Conditions, a different model or application composition · ➖ No built-in support for this specific capability.**
+Short labels identify the actual API or limitation.
 
-Awilix's inferred `cradle` and typed-inject's registration types are real compile-time features.
-Katagami's distinction is the combination of accumulated registration checks with **scope-filtered
-factory resolvers**, using direct `r.resolve(token)` calls. Effect also checks unsatisfied service
-requirements, within its broader effect and resource model.
+#### Type safety and setup
 
-| Library | Lifetimes / scope model | Asynchronous services | Resource cleanup |
-| --- | --- | --- | --- |
-| **Katagami** | **Singleton, transient, scoped; nested scopes** | **Inferred `Promise<T>`; explicitly await dependencies** | **`Symbol.dispose` / `Symbol.asyncDispose` via `disposable()`; `await using`** |
-| InversifyJS | Singleton, transient, request (one resolution graph); container hierarchy | Async bindings via `getAsync` / `getAllAsync`; awaits dependencies | Singleton deactivation handlers |
-| tsyringe | Singleton, transient, resolution-scoped, container-scoped | Factories can return Promise-valued services; consumer handles the Promise | `container.dispose()` for constructed disposable instances |
-| TypeDI | Shared or transient services; named containers | Promise-valued services; consumer handles the Promise | `reset()` / removal can call `destroy()`; returned Promise is not awaited |
-| Awilix | Singleton, transient, scoped | Promise-valued factories; consumer handles the Promise | Registered disposers for cached singleton/scoped values |
-| NestJS | Singleton, transient, HTTP request; scope propagation | Async providers are awaited before dependent construction | Application lifecycle hooks; not called for request-scoped classes |
-| Effect | Memoized layers and explicit resource scopes | Effectful acquisition, including async effects | Scope finalizers and `acquireRelease` |
-| typed-inject | Singleton, transient; disposable child injectors | Promise-valued factories with inferred return types | `injector.dispose()` awaits owned instances' `dispose()` |
+| Feature | **Katagami**<br>**3.0.3** | InversifyJS<br>8.2.3 | tsyringe<br>4.10.0 | TypeDI<br>0.10.0 | Awilix<br>13.0.5 | NestJS<br>12.0.1 | Effect<br>3.22.2 | typed-inject<br>5.0.0 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **Runtime requirements** | **✅ Standard TypeScript** | ⚠️ Reflect metadata for class DI | ⚠️ Reflect metadata for class DI | ⚠️ Reflect metadata setup | ✅ No DI metadata | ⚠️ Nest modules / metadata | ✅ Effect / Layer APIs | ✅ Standard TypeScript |
+| **Injection style** | **Explicit factories / constructors** | Constructor / property / factory | Constructor / factory | Constructor / property / factory | Proxy / classic / factory | Constructor / property / factory | Functional services / layers | Constructor / factory + `inject` |
+| **Token types** | **Class / string / number / symbol** | Class / string / symbol | Class / string / symbol | Class / string / `Token<T>` | String / symbol | Class / string / symbol | `Context.Tag` | String literals |
+| **Type safety** | **✅ Inferred services + scope checks** | ✅ Typed identifiers / bindings | ✅ Class / generic types | ✅ Class / `Token<T>` | ✅ Inferred cradle | ✅ Typed providers | ✅ Typed service requirements | ✅ Tokens + `inject` tuples |
+| **Registration-derived types** | **✅ Accumulated tokens** | ➖ | ➖ | ➖ | ✅ `register` → cradle | ➖ | ⚠️ Layer requirements | ✅ Accumulated tokens |
+| **Missing required tokens: compile-time check¹** | **✅ Literal / unique-symbol keys** | ➖ Runtime check | ➖ Runtime check | ➖ Runtime check | ⚠️ Cradle only | ➖ Runtime graph | ✅ Unsatisfied requirements | ✅ Literal keys |
+| **Scoped access from singleton/transient factories: compile-time check¹** | **✅ Scoped tokens excluded** | ➖ | ➖ | ➖ | ⚠️ Runtime strict mode | ⚠️ Request-scope propagation | ⚠️ Different `Scope` model | ➖ No scoped lifetime |
+| **Zero runtime dependency packages²** | **✅** | ➖ | ➖ | ⚠️ Reflect polyfill installed separately | ⚠️ Browser entry differs | ➖ | ➖ | ✅ |
+| **Tree-shaking support²** | **✅ ESM / subpaths / `sideEffects: false`** | ⚠️ ESM; `sideEffects: true` | ⚠️ ESM build | ✅ ESM / `sideEffects: false` | ⚠️ ESM / browser builds | ⚠️ ESM / framework setup | ✅ ESM / subpaths / side-effect declaration | ⚠️ ESM build |
 
-“Request” is not identical across libraries: InversifyJS uses a resolution graph, while NestJS can
-use an HTTP request. Katagami and Awilix let you create an explicit scope per request.
-Returning a Promise and automatically awaiting dependencies are also different capabilities.
-See [composition, optional/multiple resolution and tooling](./docs/choosing-di.md#composition-and-tooling)
-for the rest of the feature comparison.
+#### Lifetimes, async services and cleanup
+
+| Feature | **Katagami**<br>**3.0.3** | InversifyJS<br>8.2.3 | tsyringe<br>4.10.0 | TypeDI<br>0.10.0 | Awilix<br>13.0.5 | NestJS<br>12.0.1 | Effect<br>3.22.2 | typed-inject<br>5.0.0 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **Lifetimes** | **✅ Singleton / Transient / Scoped** | ✅ Singleton / Transient / Request | ✅ Singleton / Transient / Resolution / Container | ✅ Shared / Transient | ✅ Singleton / Transient / Scoped | ✅ Singleton / Transient / Request | ⚠️ Memoized / fresh layers + scopes | ✅ Singleton / Transient |
+| **Request / scoped lifetime³** | **✅ Explicit per-request scope** | ⚠️ One resolution graph | ✅ Container / resolution scoped | ⚠️ Named containers | ✅ Explicit per-request scope | ✅ HTTP request scope | ⚠️ Resource scopes | ⚠️ Child injectors; no Scoped provider |
+| **Child containers / nested scopes³** | **✅ Nested scopes** | ✅ Container hierarchy | ✅ Child containers | ⚠️ Named containers | ✅ Child scopes | ⚠️ Module / request contexts | ⚠️ Nested resource scopes | ✅ Child injectors |
+| **Async factories** | **✅ Promise-valued factories** | ✅ Async bindings | ✅ Promise-valued factories | ✅ Promise-valued services | ✅ Promise-valued factories | ✅ Async providers | ✅ Effectful acquisition | ✅ Promise-valued factories |
+| **Async result type tracking** | **✅ Inferred `Promise<T>`** | ✅ `getAsync<T>` | ⚠️ Promise-valued service type | ⚠️ Promise-valued service type | ✅ Inferred `Promise<T>` | ⚠️ Provider / consumer types | ✅ Effect result / error / requirements | ✅ Inferred `Promise<T>` |
+| **Automatically await async dependencies⁴** | **➖ Explicit `await`** | ✅ `getAsync` / `getAllAsync` | ➖ Consumer awaits | ➖ Consumer awaits | ➖ Consumer awaits | ✅ Before consumer construction | ✅ Effect composition | ➖ Consumer awaits |
+| **Resource cleanup⁵** | **✅ Disposal symbols / `await using`** | ⚠️ Singleton deactivation | ✅ Constructed disposables | ⚠️ `destroy()` on reset / removal | ⚠️ Cached values + disposer | ⚠️ App lifecycle hooks | ✅ Scope finalizers | ✅ Owned disposable instances |
+| **Await asynchronous cleanup⁵** | **✅ `Symbol.asyncDispose`** | ✅ Async deactivation | ✅ `container.dispose()` | ➖ `destroy()` is not awaited | ✅ `container.dispose()` | ⚠️ App hooks; not request-scoped classes | ✅ Effect finalizers | ✅ `injector.dispose()` |
+
+#### Composition and advanced features
+
+| Feature | **Katagami**<br>**3.0.3** | InversifyJS<br>8.2.3 | tsyringe<br>4.10.0 | TypeDI<br>0.10.0 | Awilix<br>13.0.5 | NestJS<br>12.0.1 | Effect<br>3.22.2 | typed-inject<br>5.0.0 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **Optional resolution** | **✅ `tryResolve` / `tryResolveAll`** | ✅ Optional get / inject | ✅ Optional injection | ⚠️ `has` then `get` | ✅ `allowUnregistered` | ✅ Optional injection | ✅ `serviceOption` | ⚠️ Compose optional values |
+| **Multi-binding** | **✅ `resolveAll`** | ✅ `getAll` / `getAllAsync` | ✅ `injectAll` / `resolveAll` | ✅ `getMany` | ⚠️ Collection-valued service | ⚠️ Array provider | ⚠️ Collection-valued service | ⚠️ Collection-valued service |
+| **Lazy resolution⁶** | **✅ `lazy()`; sync class tokens** | ⚠️ Deferred identifiers / factories | ✅ `delay()` proxy | ⚠️ Deferred type reference | ⚠️ Cradle property access | ⚠️ `LazyModuleLoader` | ⚠️ Lazy effect execution | ⚠️ Inject a factory |
+| **Conditional bindings** | **⚠️ Tokens / factory logic** | ✅ Contextual constraints | ✅ Predicate-aware factory | ⚠️ Factory logic | ⚠️ Local injection / factory logic | ⚠️ Dynamic modules / factories | ⚠️ Select / compose layers | ⚠️ Factory logic |
+| **Auto-loading / discovery⁶** | **➖ Explicit `use()`** | ⚠️ Class autobinding | ➖ Explicit registrations | ➖ Explicit imports | ✅ `loadModules` (Node) | ⚠️ `DiscoveryService` | ➖ Explicit layers | ➖ Explicit providers |
+| **Module system / composition** | **✅ `use()`** | ✅ Container modules | ✅ `@registry` | ⚠️ Group registrations | ✅ `loadModules` / `register` | ✅ Modules / dynamic modules | ✅ Layer composition | ⚠️ Compose provider chains |
+| **Circular dependency detection⁷** | **✅ Runtime cycle path** | ✅ Runtime detection | ⚠️ Constructor error / `delay` | ⚠️ Deferred type references | ✅ Runtime cycle path | ⚠️ Cycle errors / `forwardRef` | ⚠️ Typed Layer requirements | ⚠️ Registration order constrains dependencies |
+| **Middleware / interceptors⁶** | **⚠️ Higher-order factories** | ✅ Activation / deactivation hooks | ✅ Before / after resolution | ⚠️ Factory wrappers | ⚠️ Factory wrappers | ⚠️ Request interceptors, not DI hooks | ⚠️ Effect composition | ⚠️ Provider decoration |
+| **Snapshot / restore⁶** | **➖** | ✅ `snapshot` / `restore` | ➖ | ➖ | ➖ | ➖ | ➖ | ➖ |
+| **Test substitution / isolation** | **✅ Fresh scopes / containers + `use()`** | ✅ Rebind / snapshots | ✅ Child container overrides | ✅ Named containers / reset | ✅ Child scopes / overrides | ✅ `overrideProvider` | ✅ Substitute test layers | ✅ Child injector overrides |
+
+**What stands out:** Katagami combines **accumulated registration types, scope-filtered factory
+resolvers, three lifetimes and zero runtime dependencies** with direct `r.resolve(token)` calls.
+Optional/multiple resolution, module composition, lazy class resolution and standards-based cleanup
+stay available without decorator setup. Awilix, Effect and typed-inject also provide meaningful
+compile-time checks, as shown above.
+
+<details>
+<summary>Comparison notes: type guarantees, scopes, async behavior and feature boundaries</summary>
+
+1. **Type guarantees:** Katagami's missing-token guarantee applies to accumulated literal keys and
+   unique symbols with their types preserved. Class tokens, predeclared maps and mutable aliases
+   have [documented boundaries](./docs/type-safety.md). Awilix rejects unknown cradle properties,
+   but its broad `resolve` overload accepts unknown names. Effect checks service requirements in
+   its own model. Scope checks here mean excluding scoped tokens from singleton/transient resolvers.
+2. **Setup and bundles:** Metadata notes describe the documented class-injection path; explicit
+   value/factory bindings can avoid decorating individual services. Core Katagami needs no polyfills;
+   disposal has [host/compiler requirements](./docs/guide.md#compatibility). ESM and side-effect
+   declarations help tree shaking, but these are packaging comparisons, not measured bundle sizes.
+3. **Scopes:** InversifyJS Request means one resolution graph, not an HTTP request. Named containers,
+   module contexts, child injectors and Effect resource scopes are not identical lifetime policies.
+4. **Async:** Returning a Promise is distinct from awaiting dependencies before injection.
+   Katagami keeps the Promise in the inferred type and leaves `await` explicit.
+5. **Cleanup:** Katagami's opt-in `disposable()` integrates `Symbol.dispose`, `Symbol.asyncDispose`
+   and `await using`. Ownership varies by library; InversifyJS deactivation is for singletons,
+   Awilix disposers are for cached values, and Nest hooks exclude request-scoped classes.
+6. **Composition versus dedicated APIs:** A service proxy, deferred token and lazy module are
+   different features. Autobinding/discovery is not filesystem loading. Katagami's `use()` copies
+   registrations; containers are mutable. Factory wrappers are not interceptor APIs, and fresh
+   containers are not snapshots. [Composition details](./docs/choosing-di.md#composition-and-tooling).
+7. **Cycles:** Runtime cycle detection, deferred references and static dependency requirements are
+   different mechanisms. A ⚠️ entry does not promise a general cycle detector; runtime checks do
+   not imply detection of every asynchronous deadlock.
+
+</details>
 
 ## Why Katagami for AI-assisted development?
 

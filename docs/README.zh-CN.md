@@ -33,7 +33,7 @@ Katagami 在普通 TypeScript 工厂中结合了**从注册推导类型、编译
 
 | 库／版本 | 依赖类型与注册检查 | 作用域策略 |
 | --- | --- | --- |
-| **Katagami 3.0.2** | **累积字面量、unique symbol 的注册类型，拒绝未注册的必需 token** | **从 Singleton、Transient 工厂的 resolver 类型中排除 Scoped token** |
+| **Katagami 3.0.3** | **累积字面量、unique symbol 的注册类型，拒绝未注册的必需 token** | **从 Singleton、Transient 工厂的 resolver 类型中排除 Scoped token** |
 | InversifyJS 8.2.3 | 有类型的 binding；运行时检查是否已绑定 | binding 的生命周期设置 |
 | tsyringe 4.10.0 | 类与泛型类型；运行时检查注册 | 生命周期设置与子容器 |
 | TypeDI 0.10.0 | 类与 `Token<T>`；运行时检查注册 | 共享、Transient 服务与命名容器 |
