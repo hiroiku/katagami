@@ -25,6 +25,25 @@ const greeting: string = createScope(container).resolve('greeting');
 console.log(greeting);
 ```
 
+## Katagami를 선택하는 이유와 라이브러리 비교
+
+**등록에서 추론한 타입, 컴파일 시점의 스코프 제한, 런타임 의존성 없음**을 일반 TypeScript 팩터리에서 함께 사용할 수 있습니다. 데코레이터나 메타데이터 설정이 필요 없으며, 리소스 정리와 지연 해석은 별도 진입점으로 가져옵니다.
+
+**2026-09-11 확인.** npm의 안정 버전과 공식 자료를 비교했습니다. [버전과 출처](./choosing-di.md#comparison-sources), [비동기·정리 기능까지 포함한 전체 비교](../README.md#library-comparison)를 참고하세요.
+
+| 라이브러리 / 버전 | 의존성 타입과 등록 확인 | 스코프 정책 |
+| --- | --- | --- |
+| **Katagami 3.0.2** | **리터럴·unique symbol 등록을 누적하고 미등록 필수 토큰 거부** | **Singleton·Transient 팩터리에서 Scoped 토큰을 타입으로 제외** |
+| InversifyJS 8.2.3 | 타입이 있는 binding, 등록 여부는 런타임 확인 | binding의 라이프타임 설정 |
+| tsyringe 4.10.0 | 클래스·제네릭 타입, 등록 여부는 런타임 확인 | 라이프타임 설정과 자식 컨테이너 |
+| TypeDI 0.10.0 | 클래스·`Token<T>`, 등록 여부는 런타임 확인 | 공유·Transient 서비스와 이름 있는 컨테이너 |
+| Awilix 13.0.5 | 등록에서 cradle 추론. 넓은 `resolve`는 미등록 이름도 허용 | `strict: true`로 런타임 라이프타임 검사 |
+| NestJS 12.0.1 | 타입이 있는 provider, 런타임 의존성 그래프 | Request 스코프가 의존하는 쪽으로 전파 |
+| Effect 3.22.2 | `Effect`·`Layer` 타입으로 필요한 서비스 추적 | 타입이 있는 `Scope`와 finalizer |
+| typed-inject 5.0.0 | 문자열 토큰 누적과 `inject` 튜플 검사 | Singleton·Transient, 자식 injector |
+
+Awilix, Effect, typed-inject에도 컴파일 시점 기능이 있습니다. Katagami는 등록 확인과 스코프 제한을 직접 `r.resolve(token)`을 호출하는 API로 결합합니다. [토큰 타입·클래스·변경 가능한 참조의 조건](./type-safety.md)이 적용됩니다.
+
 ## AI 코딩 에이전트와 함께 사용하기
 
 에이전트가 의존 관계를 수정하고 TypeScript 검사기를 실행한 뒤 진단에 따라 수정하는 흐름을 만듭니다. 팩터리에 의존 관계가 일반 TypeScript 코드로 드러납니다.

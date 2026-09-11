@@ -1,6 +1,6 @@
 {
 	"name": "katagami",
-	"version": "3.0.1",
+	"version": "3.0.2",
 	"description": "Type-safe dependency injection for TypeScript, with inferred types and scope checks for AI-assisted development. No decorators or reflect-metadata.",
 	"license": "MIT",
 	"type": "module",

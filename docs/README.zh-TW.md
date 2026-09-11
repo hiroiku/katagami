@@ -25,6 +25,25 @@ const greeting: string = createScope(container).resolve('greeting');
 console.log(greeting);
 ```
 
+## 為什麼選擇 Katagami：函式庫比較
+
+Katagami 在一般 TypeScript 工廠中結合了**從註冊推導型別、編譯時作用域限制、零執行期依賴**。不需要裝飾器或中繼資料設定，資源清理與延遲解析可透過獨立入口按需匯入。
+
+**查核日期：2026-09-11。** 對照 npm 穩定版與官方資料；請參閱[版本與來源](./choosing-di.md#comparison-sources)及[包含非同步與清理功能的完整比較](../README.md#library-comparison)。
+
+| 函式庫／版本 | 依賴型別與註冊檢查 | 作用域策略 |
+| --- | --- | --- |
+| **Katagami 3.0.2** | **累積字面值、unique symbol 的註冊型別，拒絕未註冊的必要 token** | **從 Singleton、Transient 工廠的 resolver 型別中排除 Scoped token** |
+| InversifyJS 8.2.3 | 具型別的 binding；執行時檢查是否已綁定 | binding 的生命週期設定 |
+| tsyringe 4.10.0 | 類別與泛型型別；執行時檢查註冊 | 生命週期設定與子容器 |
+| TypeDI 0.10.0 | 類別與 `Token<T>`；執行時檢查註冊 | 共用、Transient 服務與具名容器 |
+| Awilix 13.0.5 | 從註冊推導 cradle；寬泛的 `resolve` 仍接受未知名稱 | `strict: true` 在執行時檢查生命週期洩漏 |
+| NestJS 12.0.1 | 具型別的 provider；執行時解析依賴圖 | Request 作用域向依賴方傳播 |
+| Effect 3.22.2 | 透過 `Effect`、`Layer` 型別追蹤所需服務 | 具型別的 `Scope` 與 finalizer |
+| typed-inject 5.0.0 | 累積字串 token，檢查 `inject` 元組 | Singleton、Transient 與子 injector |
+
+Awilix、Effect、typed-inject 也有編譯時檢查能力。Katagami 的特色是透過直接呼叫 `r.resolve(token)` 的 API 結合註冊檢查與作用域限制。[窄 token 型別、類別與可變參照的邊界](./type-safety.md)仍然適用。
+
 ## 與 AI 程式設計代理搭配使用
 
 讓代理修改依賴關係，執行 TypeScript 檢查，再根據診斷修正。明確的工廠讓依賴關係直接呈現在一般 TypeScript 程式碼中。

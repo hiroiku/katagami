@@ -25,6 +25,25 @@ const greeting: string = createScope(container).resolve('greeting');
 console.log(greeting);
 ```
 
+## Pourquoi choisir Katagami ? Comparaison
+
+Katagami associe **types déduits des enregistrements, restrictions de portée à la compilation et aucune dépendance d'exécution** dans des fabriques TypeScript ordinaires. Aucun décorateur ni métadonnée n'est nécessaire. La libération des ressources et la résolution différée ont des points d'entrée distincts.
+
+**Vérifié le 2026-09-11**, à partir des versions stables npm et des sources officielles. Consultez les [versions et sources](./choosing-di.md#comparison-sources) et le [comparatif complet sur l'asynchronisme et la libération des ressources](../README.md#library-comparison).
+
+| Bibliothèque / version | Types et vérification des enregistrements | Politique de portée |
+| --- | --- | --- |
+| **Katagami 3.0.2** | **Accumule les tokens littéraux/unique symbol ; rejette les tokens requis non enregistrés** | **Exclut les tokens Scoped du résolveur des fabriques Singleton/Transient** |
+| InversifyJS 8.2.3 | Bindings typés ; existence vérifiée à l'exécution | Durée de vie configurée par binding |
+| tsyringe 4.10.0 | Types de classe/génériques ; enregistrements vérifiés à l'exécution | Durées de vie et conteneurs enfants |
+| TypeDI 0.10.0 | Classes et `Token<T>` ; enregistrements vérifiés à l'exécution | Services partagés/Transient, conteneurs nommés |
+| Awilix 13.0.5 | Cradle déduit des enregistrements ; `resolve` accepte aussi des noms inconnus | `strict: true` vérifie les fuites de durée de vie à l'exécution |
+| NestJS 12.0.1 | Providers typés ; graphe résolu à l'exécution | La portée Request se propage aux providers dépendants |
+| Effect 3.22.2 | Services requis suivis dans les types `Effect`/`Layer` | `Scope` typé et finaliseurs |
+| typed-inject 5.0.0 | Tokens chaînes accumulés et tuples `inject` vérifiés | Singleton, Transient, injecteurs enfants |
+
+Awilix, Effect et typed-inject proposent aussi des vérifications de types. Katagami associe celles des enregistrements et des portées avec des appels directs à `r.resolve(token)`. Les [limites des tokens, classes et références mutables](./type-safety.md) s'appliquent.
+
 ## Travailler avec des agents de programmation IA
 
 L’agent modifie les dépendances, exécute le vérificateur TypeScript, puis corrige le code à partir des diagnostics. Les fabriques explicites rendent les dépendances visibles dans du code TypeScript ordinaire.

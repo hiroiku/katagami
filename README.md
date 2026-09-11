@@ -37,6 +37,64 @@ No service interface or explicit generic argument is needed here. Literal string
 unique symbols and class tokens can all be used. See [type guarantees](./docs/type-safety.md)
 for the difference between accumulated registrations and a predeclared type map.
 
+## Why Katagami
+
+Katagami combines **registration-derived types, compile-time scope restrictions and zero runtime
+dependencies** in an ordinary TypeScript factory API.
+
+- **Types grow with your registrations.** Literal keys and unique symbols carry their inferred
+  service types into subsequent factories; required tokens outside that set are compile-time errors.
+- **Request state stays explicit.** Singleton and transient factories cannot resolve scoped tokens
+  through their supplied typed resolver. You can find this mistake before starting the application.
+- **No decorator setup.** No `experimentalDecorators`, `emitDecoratorMetadata` or Reflect polyfill
+  is needed for DI. Constructors and factories stay ordinary TypeScript.
+- **Import the capabilities you use.** Core DI, `katagami/disposable` and `katagami/lazy` are separate
+  entry points. ESM exports and `sideEffects: false` support tree shaking; optional cleanup integrates
+  with `await using` and the host's disposal symbols.
+
+These checks assume narrow tokens and preserved registration types; see the
+[class-token, mutation and predeclared-map boundaries](./docs/type-safety.md).
+
+### Library comparison
+
+Reviewed **2026-09-11**, against the npm `latest` versions below and official documentation.
+The tables describe the built-in APIs; add-ons and application-specific wrappers can change the
+trade-offs. [Version sources and detailed comparison notes](./docs/choosing-di.md#comparison-sources)
+explain the distinctions.
+
+| Library / reviewed version | Dependency typing and missing registrations | Scoped-dependency handling | DI setup |
+| --- | --- | --- | --- |
+| **Katagami 3.0.2** | **Accumulated literal/unique-symbol tokens; missing required tokens rejected** | **Scoped tokens excluded from singleton/transient factory resolvers** | **No decorators or metadata; zero runtime dependencies** |
+| [InversifyJS 8.2.3](https://inversify.io/docs/fundamentals/binding/) | Typed identifiers and bindings; binding existence checked at runtime | Declared binding scopes; not a scope-filtered resolver type | Metadata-based class injection; explicit value/factory bindings also available |
+| [tsyringe 4.10.0](https://github.com/microsoft/tsyringe#readme) | Class/generic resolution types; registrations checked at runtime | Runtime lifetime settings; factory receives the container | Decorators and a Reflect metadata polyfill for class injection |
+| [TypeDI 0.10.0](https://github.com/typestack/typedi/tree/v0.10.0) | Class and `Token<T>` types; registrations checked at runtime | Shared/transient services and named containers | Decorators and `reflect-metadata` in the TypeScript setup |
+| [Awilix 13.0.5](https://github.com/jeffijoe/awilix#readme) | Registration-derived cradle types; broad `resolve` overload still accepts unknown names | `strict: true` checks lifetime leaks at runtime | No decorators or metadata |
+| [NestJS 12.0.1](https://docs.nestjs.com/fundamentals/custom-providers) | Typed providers; module/provider graph resolved at runtime | Request scope propagates to dependent providers | Framework modules and metadata-based class injection |
+| [Effect 3.22.2](https://effect.website/docs/v3/requirements-management/layers) | Service requirements tracked in `Effect` / `Layer` types | Typed `Scope` requirements and resource finalizers; a different lifetime model | No decorators or metadata; Effect's service/layer model |
+| [typed-inject 5.0.0](https://github.com/nicojs/typed-inject#readme) | Accumulated string tokens and checked `inject` tuples | Singleton/transient providers and child injectors; no separate scoped lifetime | No decorators or metadata; zero runtime dependencies |
+
+Awilix's inferred `cradle` and typed-inject's registration types are real compile-time features.
+Katagami's distinction is the combination of accumulated registration checks with **scope-filtered
+factory resolvers**, using direct `r.resolve(token)` calls. Effect also checks unsatisfied service
+requirements, within its broader effect and resource model.
+
+| Library | Lifetimes / scope model | Asynchronous services | Resource cleanup |
+| --- | --- | --- | --- |
+| **Katagami** | **Singleton, transient, scoped; nested scopes** | **Inferred `Promise<T>`; explicitly await dependencies** | **`Symbol.dispose` / `Symbol.asyncDispose` via `disposable()`; `await using`** |
+| InversifyJS | Singleton, transient, request (one resolution graph); container hierarchy | Async bindings via `getAsync` / `getAllAsync`; awaits dependencies | Singleton deactivation handlers |
+| tsyringe | Singleton, transient, resolution-scoped, container-scoped | Factories can return Promise-valued services; consumer handles the Promise | `container.dispose()` for constructed disposable instances |
+| TypeDI | Shared or transient services; named containers | Promise-valued services; consumer handles the Promise | `reset()` / removal can call `destroy()`; returned Promise is not awaited |
+| Awilix | Singleton, transient, scoped | Promise-valued factories; consumer handles the Promise | Registered disposers for cached singleton/scoped values |
+| NestJS | Singleton, transient, HTTP request; scope propagation | Async providers are awaited before dependent construction | Application lifecycle hooks; not called for request-scoped classes |
+| Effect | Memoized layers and explicit resource scopes | Effectful acquisition, including async effects | Scope finalizers and `acquireRelease` |
+| typed-inject | Singleton, transient; disposable child injectors | Promise-valued factories with inferred return types | `injector.dispose()` awaits owned instances' `dispose()` |
+
+“Request” is not identical across libraries: InversifyJS uses a resolution graph, while NestJS can
+use an HTTP request. Katagami and Awilix let you create an explicit scope per request.
+Returning a Promise and automatically awaiting dependencies are also different capabilities.
+See [composition, optional/multiple resolution and tooling](./docs/choosing-di.md#composition-and-tooling)
+for the rest of the feature comparison.
+
 ## Why Katagami for AI-assisted development?
 
 Give coding agents a concrete feedback loop: edit dependency wiring, run the TypeScript checker,

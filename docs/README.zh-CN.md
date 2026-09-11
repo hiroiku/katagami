@@ -25,6 +25,25 @@ const greeting: string = createScope(container).resolve('greeting');
 console.log(greeting);
 ```
 
+## 为什么选择 Katagami：库对比
+
+Katagami 在普通 TypeScript 工厂中结合了**从注册推导类型、编译时作用域限制、零运行时依赖**。无需装饰器或元数据配置，资源清理和延迟解析可通过独立入口按需导入。
+
+**核查日期：2026-09-11。** 对照 npm 稳定版和官方资料；参见[版本与来源](./choosing-di.md#comparison-sources)及[包含异步和清理功能的完整对比](../README.md#library-comparison)。
+
+| 库／版本 | 依赖类型与注册检查 | 作用域策略 |
+| --- | --- | --- |
+| **Katagami 3.0.2** | **累积字面量、unique symbol 的注册类型，拒绝未注册的必需 token** | **从 Singleton、Transient 工厂的 resolver 类型中排除 Scoped token** |
+| InversifyJS 8.2.3 | 有类型的 binding；运行时检查是否已绑定 | binding 的生命周期设置 |
+| tsyringe 4.10.0 | 类与泛型类型；运行时检查注册 | 生命周期设置与子容器 |
+| TypeDI 0.10.0 | 类与 `Token<T>`；运行时检查注册 | 共享、Transient 服务与命名容器 |
+| Awilix 13.0.5 | 从注册推导 cradle；宽泛的 `resolve` 仍接受未知名称 | `strict: true` 在运行时检查生命周期泄漏 |
+| NestJS 12.0.1 | 有类型的 provider；运行时解析依赖图 | Request 作用域向依赖方传播 |
+| Effect 3.22.2 | 通过 `Effect`、`Layer` 类型追踪所需服务 | 有类型的 `Scope` 与 finalizer |
+| typed-inject 5.0.0 | 累积字符串 token，检查 `inject` 元组 | Singleton、Transient 与子 injector |
+
+Awilix、Effect、typed-inject 也有编译时检查能力。Katagami 的特点是通过直接调用 `r.resolve(token)` 的 API 结合注册检查与作用域限制。[窄 token 类型、类和可变引用的边界](./type-safety.md)仍然适用。
+
 ## 配合 AI 编程智能体使用
 
 让智能体修改依赖关系，运行 TypeScript 检查，再根据诊断修复。显式工厂让依赖关系直接体现在普通 TypeScript 代码中。

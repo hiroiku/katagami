@@ -25,6 +25,45 @@ const greeting: string = createScope(container).resolve('greeting');
 console.log(greeting);
 ```
 
+## Katagamiを選ぶ理由
+
+Katagamiの強みは、**登録からの型推論・コンパイル時のスコープ制約・ランタイム依存ゼロ**を、通常のTypeScriptファクトリで組み合わせられることです。
+
+- **登録した型がそのまま使える。** リテラルキーやunique symbolの型を保てば、登録集合にない必須トークンは型エラーになります。
+- **リクエストの状態を型で分離できる。** Singleton・Transientのファクトリに渡されるresolverからは、Scopedのトークンを解決できません。
+- **デコレータ設定が不要。** DIのための`experimentalDecorators`・`emitDecoratorMetadata`・Reflectポリフィルを追加する必要がありません。
+- **必要な機能だけ取り込める。** コア・`katagami/disposable`・`katagami/lazy`を別々にインポートできます。ESMと`sideEffects: false`でツリーシェイキングに対応し、破棄はホストのdisposalシンボルと`await using`に連携します。
+
+### 他ライブラリとの比較
+
+**2026-09-11確認。** npmの`latest`安定版と公式資料をもとに、標準APIの動作を比較しています。[対象バージョン・出典・詳細な注記](./choosing-di.md#comparison-sources)も参照してください。
+
+| ライブラリ／確認した版 | 依存の型付けと登録漏れ | スコープの扱い | DIの導入設定 |
+| --- | --- | --- | --- |
+| **Katagami 3.0.2** | **リテラル・unique symbolの登録型を蓄積し、未登録の必須トークンを拒否** | **Singleton・TransientのresolverからScopedを型で除外** | **デコレータ・メタデータ不要、ランタイム依存ゼロ** |
+| InversifyJS 8.2.3 | 型付きの識別子・binding。登録の有無は実行時に確認 | bindingのスコープ指定。resolverの型では分離しない | クラス注入はメタデータ方式。明示的な値・ファクトリbindingも可能 |
+| tsyringe 4.10.0 | クラス・ジェネリックの型を利用。登録の有無は実行時に確認 | 実行時のライフタイム設定。ファクトリにはコンテナを渡す | クラス注入にデコレータとReflectメタデータのポリフィル |
+| TypeDI 0.10.0 | クラス・`Token<T>`の型を利用。登録の有無は実行時に確認 | 共有・Transientと名前付きコンテナ | TypeScriptの導入手順はデコレータと`reflect-metadata`を使用 |
+| Awilix 13.0.5 | 登録からcradleの型を推論。`resolve`の広いオーバーロードは未登録名も許可 | `strict: true`でライフタイム漏れを実行時に検出 | デコレータ・メタデータ不要 |
+| NestJS 12.0.1 | 型付きprovider。モジュールとproviderの依存グラフは実行時に解決 | Requestスコープが依存元へ伝播 | フレームワークのモジュールとメタデータ方式のクラス注入 |
+| Effect 3.22.2 | `Effect`・`Layer`の型で必要なサービスを追跡 | 型付き`Scope`とfinalizer。DIコンテナとは異なるライフタイムモデル | デコレータ・メタデータ不要。Effectのサービス・Layerを使用 |
+| typed-inject 5.0.0 | 文字列トークンを蓄積し、`inject`タプルも検査 | Singleton・Transientと子injector。独立したScoped登録はない | デコレータ・メタデータ不要、ランタイム依存ゼロ |
+
+Awilixのcradle推論、typed-injectの登録検査、Effectのサービス要求の型検査も、それぞれコンパイル時の機能です。Katagamiは、**登録集合とスコープ制約を、直接`r.resolve(token)`を呼べるファクトリAPIで組み合わせられる**点を重視しています。[型の保証範囲](./type-safety.md)にあるクラストークン・事前宣言・変更可能な参照の条件も適用されます。
+
+| ライブラリ | ライフタイム／スコープ | 非同期サービス | リソース破棄 |
+| --- | --- | --- | --- |
+| **Katagami** | **Singleton・Transient・Scoped、ネストしたスコープ** | **`Promise<T>`を推論。依存は明示的にawait** | **`disposable()`でdisposalシンボルと`await using`に連携** |
+| InversifyJS | Singleton・Transient・Request（1回の解決グラフ）、コンテナ階層 | `getAsync`・`getAllAsync`が依存の完了を待機 | Singletonのdeactivation handler |
+| tsyringe | Singleton・Transient・ResolutionScoped・ContainerScoped | Promiseを返すファクトリを登録可能。利用側で処理 | 構築したDisposableを`container.dispose()`で破棄 |
+| TypeDI | 共有・Transient、名前付きコンテナ | Promiseをサービス値として扱い、利用側で処理 | reset・削除時に`destroy()`を呼べるが、戻り値のPromiseは待機しない |
+| Awilix | Singleton・Transient・Scoped | Promiseを返すファクトリを登録可能。利用側で処理 | キャッシュしたSingleton・Scopedに登録済みdisposerを適用 |
+| NestJS | Singleton・Transient・HTTPリクエスト、スコープ伝播 | 依存providerの非同期初期化を待ってから構築 | アプリのライフサイクルフック。Requestスコープのクラスは対象外 |
+| Effect | メモ化されたLayerと明示的なリソーススコープ | 非同期処理を含むEffectによる取得 | Scopeのfinalizerと`acquireRelease` |
+| typed-inject | Singleton・Transient、破棄可能な子injector | ファクトリが返すPromiseの型も推論 | 所有するインスタンスの`dispose()`をawait |
+
+InversifyJSのRequestは1回の解決グラフであり、HTTPリクエストとは異なります。また、Promiseを値として返せることと、依存のPromiseを自動的に待って注入することは別の機能です。[モジュール合成・複数解決・拡張機能の比較](./choosing-di.md#composition-and-tooling)も掲載しています。
+
 ## AIエージェントによるコーディングで役立つ理由
 
 エージェントが依存関係を変更し、TypeScriptの型チェックを実行し、診断をもとに修正する。この手順に、登録漏れやライフタイムの誤用を検出する具体的なチェックを組み込めます。依存関係は通常のTypeScriptのファクトリとして記述します。
