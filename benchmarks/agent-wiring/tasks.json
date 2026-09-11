@@ -1,0 +1,34 @@
+[
+	{
+		"id": "add-dependency",
+		"prompt": "Add a greeting formatter dependency. Use it to format both named and guest greetings, and allow a fake formatter in tests. Preserve the existing asynchronous repository and per-request cleanup.",
+		"acceptance": [
+			"Named and guest greetings use the formatter",
+			"A fake formatter is used without global state",
+			"Type checking passes",
+			"Existing request-isolation and rejection-cleanup tests pass"
+		]
+	},
+	{
+		"id": "request-isolation",
+		"prompt": "Add an audit service that includes the current request ID in each greeting result. Ensure two overlapping requests keep distinct IDs and cleanup runs after each request, including rejection.",
+		"acceptance": [
+			"The audit ID equals its own request ID",
+			"Concurrent requests have different IDs",
+			"No shared service retains request state",
+			"Cleanup runs on success and rejection",
+			"Type checking passes"
+		]
+	},
+	{
+		"id": "async-dependency",
+		"prompt": "Initialize the user repository asynchronously. Await initialization before handling requests, share that initialized repository, and retain isolated request state. Add an initialization-rejection test.",
+		"acceptance": [
+			"Initialization happens once per app",
+			"No service method is invoked on a Promise",
+			"Initialization failure rejects the call",
+			"Request state remains isolated",
+			"Type checking and behavior tests pass"
+		]
+	}
+]

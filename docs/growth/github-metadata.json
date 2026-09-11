@@ -1,0 +1,13 @@
+{
+	"description": "Type-safe dependency injection for TypeScript, with inferred types and scope checks for AI-assisted development. No decorators or reflect-metadata.",
+	"homepage": "https://github.com/hiroiku/katagami#readme",
+	"topics": [
+		"typescript",
+		"dependency-injection",
+		"di-container",
+		"type-safety",
+		"type-inference",
+		"ai-assisted-development",
+		"coding-agents"
+	]
+}

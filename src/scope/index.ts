@@ -1,9 +1,9 @@
-import type { Container } from '../container';
-import type { DisposableContainer, DisposableScope } from '../disposable';
-import { ContainerError } from '../error';
-import { type ContainerInternals, INTERNALS } from '../internal';
-import type { AbstractConstructor, Lifetime, Registration, Resolver } from '../resolver';
-import { buildCircularPath, tokenToString } from '../resolver';
+import type { Container } from '../container/index.js';
+import type { DisposableContainer, DisposableScope } from '../disposable/index.js';
+import { ContainerError } from '../error/index.js';
+import { type ContainerInternals, INTERNALS } from '../internal.js';
+import type { AbstractConstructor, Lifetime, Registration, Resolver } from '../resolver/index.js';
+import { buildCircularPath, tokenToString } from '../resolver/index.js';
 
 /**
  * Create a new scope (child container) from a Container, Scope, or their disposable variants.
