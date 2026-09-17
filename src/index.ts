@@ -1,6 +1,7 @@
 export type { RegisteredTokens } from './container/index.js';
 export { Container, createContainer } from './container/index.js';
 export type { DisposableContainer, DisposableScope, disposable } from './disposable/index.js';
+export type { Callable, EntrypointFactory } from './entrypoint/index.js';
 export { entrypoint } from './entrypoint/index.js';
 export { ContainerError } from './error/index.js';
 export type { lazy } from './lazy/index.js';

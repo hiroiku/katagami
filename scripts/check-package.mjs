@@ -182,6 +182,27 @@ calls.invoke('unknown');
 		}),
 	);
 	run(process.execPath, [tsc, '-p', 'tsconfig.json'], consumer);
+	const publicFactory = `
+import { createContainer, entrypoint } from 'katagami';
+import { createInvocationScope } from 'katagami/invocation';
+export function createWorkUnit() {
+ const container = createContainer().registerScoped('read', entrypoint(() => (id: string) => id));
+ const scope = createInvocationScope(container);
+ return { invoke: scope.invoke };
+}
+`;
+	writeFileSync(join(consumer, 'declaration.ts'), publicFactory);
+	writeFileSync(join(consumer, 'declaration.cts'), publicFactory);
+	writeFileSync(
+		join(consumer, 'tsconfig.declarations.json'),
+		JSON.stringify({
+			extends: './tsconfig.json',
+			compilerOptions: { noEmit: false, declaration: true, emitDeclarationOnly: true, outDir: 'declarations' },
+			include: ['declaration.ts', 'declaration.cts'],
+		}),
+	);
+	run(process.execPath, [tsc, '-p', 'tsconfig.declarations.json'], consumer);
+
 	cpSync(join(root, 'examples/request-scope'), join(consumer, 'starter'), { recursive: true });
 	run(process.execPath, [tsc, '-p', 'starter/tsconfig.json'], consumer);
 	const output = run(process.execPath, ['starter/build/demo.js'], consumer);
