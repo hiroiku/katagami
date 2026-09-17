@@ -125,3 +125,24 @@ let legacyAccumulateChild = createContainer<{ old: number }>().use(createContain
 legacyAccumulateChild = legacyHelper(legacyAccumulateChild);
 const afterLegacyComposition = legacyComposite.use(publicOwner).use(predeclaredOther);
 const _afterLegacy: Promise<number> = createInvocationScope(afterLegacyComposition).invoke('operation');
+
+interface ExistingValues {
+	number: number;
+	text: string;
+}
+const existingValues: ExistingValues = { number: 1, text: 'value' };
+let dynamicRegistration = createContainer<ExistingValues>();
+for (const key of ['number', 'text'] as const) {
+	dynamicRegistration = dynamicRegistration.registerTransient(key, () => existingValues[key]);
+}
+const _exactNumber: number = createScope(dynamicRegistration).resolve('number');
+const _exactText: string = createScope(dynamicRegistration).resolve('text');
+const _transientDenied = createContainer()
+	.registerScoped('local', () => 1)
+	.registerTransient(
+		'operation',
+		entrypoint(r => () => {
+			// @ts-expect-error entrypoint でも transient factory に scoped 依存を渡さない。
+			return r.resolve('local');
+		}),
+	);

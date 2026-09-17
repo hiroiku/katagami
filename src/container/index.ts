@@ -144,7 +144,7 @@ export class Container<
 		factory: ((resolver: Resolver<T, Sync, Async>) => F) & EntrypointFactory<Resolver<T, Sync, Async>, F>,
 		...options: RegistrationArguments<Required, E>
 	): Container<
-		Omit<T, K> & Record<K, F>,
+		Record<K, F> & T,
 		Sync,
 		Async,
 		ScopedT,
@@ -162,7 +162,7 @@ export class Container<
 		factory: EntrypointFactory<Resolver<T, Sync, Async>, F>,
 		...options: RegistrationArguments<Required, E>
 	): Container<
-		Omit<T, K> & Record<K, Promise<F>>,
+		Record<K, Promise<F>> & T,
 		Sync,
 		Async,
 		ScopedT,
@@ -203,16 +203,7 @@ export class Container<
 		token: K,
 		factory: (resolver: Resolver<T, Sync, Async>) => V,
 		...options: RegistrationArguments<Required, E>
-	): Container<
-		Omit<T, K> & Record<K, V>,
-		Sync,
-		Async,
-		ScopedT,
-		ScopedSync,
-		ScopedAsync,
-		Required,
-		Append<Registrations, K, E>
-	>;
+	): Container<Record<K, V> & T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Required, Append<Registrations, K, E>>;
 	public registerSingleton<V, const E extends readonly AnyMetadataEntry[] = readonly []>(
 		token: unknown,
 		factory: (resolver: Resolver<T, Sync, Async>) => V,
@@ -235,7 +226,7 @@ export class Container<
 		factory: ((resolver: Resolver<T, Sync, Async>) => F) & EntrypointFactory<Resolver<T, Sync, Async>, F>,
 		...options: RegistrationArguments<Required, E>
 	): Container<
-		Omit<T, K> & Record<K, F>,
+		Record<K, F> & T,
 		Sync,
 		Async,
 		ScopedT,
@@ -253,7 +244,7 @@ export class Container<
 		factory: EntrypointFactory<Resolver<T, Sync, Async>, F>,
 		...options: RegistrationArguments<Required, E>
 	): Container<
-		Omit<T, K> & Record<K, Promise<F>>,
+		Record<K, Promise<F>> & T,
 		Sync,
 		Async,
 		ScopedT,
@@ -294,16 +285,7 @@ export class Container<
 		token: K,
 		factory: (resolver: Resolver<T, Sync, Async>) => V,
 		...options: RegistrationArguments<Required, E>
-	): Container<
-		Omit<T, K> & Record<K, V>,
-		Sync,
-		Async,
-		ScopedT,
-		ScopedSync,
-		ScopedAsync,
-		Required,
-		Append<Registrations, K, E>
-	>;
+	): Container<Record<K, V> & T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Required, Append<Registrations, K, E>>;
 	public registerTransient<V, const E extends readonly AnyMetadataEntry[] = readonly []>(
 		token: unknown,
 		factory: (resolver: Resolver<T, Sync, Async>) => V,
@@ -330,7 +312,7 @@ export class Container<
 		T,
 		Sync,
 		Async,
-		Omit<ScopedT, K> & Record<K, F>,
+		Record<K, F> & ScopedT,
 		ScopedSync,
 		ScopedAsync,
 		Required,
@@ -348,7 +330,7 @@ export class Container<
 		T,
 		Sync,
 		Async,
-		Omit<ScopedT, K> & Record<K, Promise<F>>,
+		Record<K, Promise<F>> & ScopedT,
 		ScopedSync,
 		ScopedAsync,
 		Required,
@@ -386,16 +368,7 @@ export class Container<
 		token: K,
 		factory: (resolver: Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>) => V,
 		...options: RegistrationArguments<Required, E>
-	): Container<
-		T,
-		Sync,
-		Async,
-		Omit<ScopedT, K> & Record<K, V>,
-		ScopedSync,
-		ScopedAsync,
-		Required,
-		Append<Registrations, K, E>
-	>;
+	): Container<T, Sync, Async, Record<K, V> & ScopedT, ScopedSync, ScopedAsync, Required, Append<Registrations, K, E>>;
 	public registerScoped<V, const E extends readonly AnyMetadataEntry[] = readonly []>(
 		token: unknown,
 		factory: (resolver: Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>) => V,
@@ -436,10 +409,10 @@ export class Container<
 				? unknown
 				: { readonly missingRequiredMetadata: never }),
 	): Container<
-		Omit<T, keyof MT> & MT,
+		T & MT,
 		Sync | MS,
 		Async | MA,
-		Omit<ScopedT, keyof MST> & MST,
+		ScopedT & MST,
 		ScopedSync | MSS,
 		ScopedAsync | MSA,
 		Required,
