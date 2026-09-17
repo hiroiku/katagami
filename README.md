@@ -198,6 +198,10 @@ See [choosing a DI approach](./docs/choosing-di.md) for trade-offs and links to 
 
 ## Documentation
 
+- [登録の属性と公開操作](./docs/registration-policies.ja.md): 必須 metadata、解決 hook、callable の公開と scope の終了。
+
+`beforeResolve` は resolver が所属する scope の解決を検査します。共有した singleton の resolver を呼出者へ再束縛したり、取得済み値の権限を推移的に再検証したりするものではありません。要求・権限に依存する処理には scoped を使ってください。
+
 - [Usage guide and API](./docs/guide.md): lifetimes, composition, classes, async factories, cleanup and lazy resolution.
 - [Type guarantees](./docs/type-safety.md): accumulated tokens, interface maps and structural class typing.
 - [AI coding guide](./docs/ai-coding-agents.md): workflow, diagnostics and a prompt to use in your project.

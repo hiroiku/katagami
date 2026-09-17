@@ -1,9 +1,37 @@
 import type { Container } from '../container/index.js';
 import type { DisposableContainer, DisposableScope } from '../disposable/index.js';
 import { ContainerError } from '../error/index.js';
+// biome-ignore lint/correctness/noUnusedImports: declare の computed property に必要な型専用キー。
+import type { REGISTRATION_STATE } from '../internal.js';
 import { type ContainerInternals, INTERNALS } from '../internal.js';
+import type { AnyMetadataKey, MetadataReader } from '../metadata/index.js';
 import type { AbstractConstructor, Lifetime, Registration, Resolver } from '../resolver/index.js';
 import { buildCircularPath, tokenToString } from '../resolver/index.js';
+
+export interface RegistrationDescription {
+	readonly token: unknown;
+	readonly lifetime: Lifetime;
+	readonly metadata: MetadataReader;
+	readonly entrypoint: boolean;
+}
+export interface ResolutionEvent extends RegistrationDescription {
+	readonly requester: RegistrationDescription | undefined;
+	readonly path: readonly unknown[];
+}
+export type BeforeResolve = (event: ResolutionEvent) => void;
+export interface ScopeOptions {
+	readonly beforeResolve?: BeforeResolve;
+}
+interface ConstructionFrame {
+	readonly token: unknown;
+	active: boolean;
+}
+interface ResolutionContext {
+	readonly construction?: readonly ConstructionFrame[];
+	readonly path: readonly unknown[];
+	readonly singleton: boolean;
+	readonly requester?: RegistrationDescription;
+}
 
 /**
  * Create a new scope (child container) from a Container, Scope, or their disposable variants.
@@ -22,9 +50,12 @@ export function createScope<
 	ScopedT,
 	ScopedSync extends AbstractConstructor,
 	ScopedAsync extends AbstractConstructor,
+	Required extends readonly AnyMetadataKey[],
+	Registrations,
 >(
-	source: Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>,
-): Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
+	source: Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Required, Registrations>,
+	options?: ScopeOptions,
+): Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Registrations>;
 export function createScope<
 	T,
 	Sync extends AbstractConstructor,
@@ -32,9 +63,11 @@ export function createScope<
 	ScopedT,
 	ScopedSync extends AbstractConstructor,
 	ScopedAsync extends AbstractConstructor,
+	Registrations,
 >(
-	source: Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>,
-): Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
+	source: Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Registrations>,
+	options?: ScopeOptions,
+): Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Registrations>;
 export function createScope<
 	T,
 	Sync extends AbstractConstructor,
@@ -42,9 +75,12 @@ export function createScope<
 	ScopedT,
 	ScopedSync extends AbstractConstructor,
 	ScopedAsync extends AbstractConstructor,
+	Required extends readonly AnyMetadataKey[],
+	Registrations,
 >(
-	source: DisposableContainer<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>,
-): Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
+	source: DisposableContainer<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Required, Registrations>,
+	options?: ScopeOptions,
+): Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Registrations>;
 export function createScope<
 	T,
 	Sync extends AbstractConstructor,
@@ -52,17 +88,23 @@ export function createScope<
 	ScopedT,
 	ScopedSync extends AbstractConstructor,
 	ScopedAsync extends AbstractConstructor,
+	Registrations,
 >(
-	source: DisposableScope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>,
-): Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
-export function createScope(source: { readonly [INTERNALS]: ContainerInternals }): Scope {
+	source: DisposableScope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Registrations>,
+	options?: ScopeOptions,
+): Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Registrations>;
+export function createScope(source: { readonly [INTERNALS]: ContainerInternals }, options?: ScopeOptions): Scope {
 	const internals = source[INTERNALS];
 
 	if (internals.isDisposed()) {
 		throw new ContainerError('Cannot create a scope from a disposed container.');
 	}
 
-	return new Scope(internals.registrations, internals.singletonCache);
+	const hooks = [...internals.beforeResolve];
+	if (options?.beforeResolve) {
+		hooks.push(options.beforeResolve);
+	}
+	return new Scope(internals.registrations, internals.singletonCache, hooks);
 }
 
 /**
@@ -86,12 +128,12 @@ export class Scope<
 	ScopedT = Record<never, never>,
 	ScopedSync extends AbstractConstructor = never,
 	ScopedAsync extends AbstractConstructor = never,
+	Registrations = unknown,
 > {
 	private readonly registrations: Map<unknown, Registration[]>;
 	private readonly singletonCache: Map<Registration, unknown>;
 	private readonly scopedCache: Map<Registration, unknown>;
-	private readonly resolvingTokens: Set<unknown>;
-	private singletonDepth = 0;
+	private readonly beforeResolve: readonly BeforeResolve[];
 	private disposed = false;
 
 	/**
@@ -99,15 +141,22 @@ export class Scope<
 	 *
 	 * @internal
 	 */
-	public readonly [INTERNALS]: ContainerInternals;
+	public declare readonly [REGISTRATION_STATE]: Registrations;
+	public readonly [INTERNALS]: ContainerInternals & { readonly kind: 'scope' };
 
-	public constructor(registrations: Map<unknown, Registration[]>, singletonCache: Map<Registration, unknown>) {
+	public constructor(
+		registrations: Map<unknown, Registration[]>,
+		singletonCache: Map<Registration, unknown>,
+		beforeResolve: readonly BeforeResolve[] = [],
+	) {
 		this.registrations = registrations;
 		this.singletonCache = singletonCache;
 		this.scopedCache = new Map();
-		this.resolvingTokens = new Set();
+		this.beforeResolve = beforeResolve;
 		this[INTERNALS] = {
+			beforeResolve: this.beforeResolve,
 			isDisposed: () => this.disposed,
+			kind: 'scope',
 			markDisposed: () => {
 				this.disposed = true;
 			},
@@ -188,160 +237,122 @@ export class Scope<
 		return this.resolveAllTokens(token, false);
 	}
 
-	/**
-	 * Internal resolution logic shared by resolve and tryResolve.
-	 * Resolves the last registered factory for the token.
-	 *
-	 * @param token Token to resolve
-	 * @param required If true, throws when the token is not registered. If false, returns undefined.
-	 * @returns The resolved instance, or undefined if not registered and required is false
-	 */
-	private resolveToken(token: unknown, required: boolean): unknown {
+	private describe(token: unknown, registration: Registration): RegistrationDescription {
+		return Object.freeze({
+			entrypoint: registration.entrypoint,
+			lifetime: registration.lifetime,
+			metadata: registration.metadata,
+			token,
+		});
+	}
+	private check(token: unknown, registration: Registration, context: ResolutionContext): void {
+		const event = Object.freeze({
+			...this.describe(token, registration),
+			path: Object.freeze([...context.path, token]),
+			requester: context.requester,
+		});
+		for (const hook of this.beforeResolve) {
+			const result: unknown = hook(event);
+			if (result !== undefined) {
+				void Promise.resolve(result).catch(() => undefined);
+				throw new ContainerError('beforeResolve must return undefined synchronously.');
+			}
+		}
+	}
+	private lookup(token: unknown, required: boolean): Registration[] | undefined {
 		if (this.disposed) {
 			throw new ContainerError('Cannot resolve from a disposed scope.');
 		}
-
 		const registrations = this.registrations.get(token);
-
-		if (registrations === undefined || registrations.length === 0) {
+		if (!registrations?.length) {
 			if (required) {
 				throw new ContainerError(`Token "${tokenToString(token)}" is not registered.`);
 			}
-
 			return undefined;
 		}
-
-		const registration = registrations[registrations.length - 1] as {
-			readonly factory: (resolver: Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>) => unknown;
-			readonly lifetime: Lifetime;
-		};
-
-		const singletonCached = this.singletonCache.get(registration as Registration);
-
-		if (singletonCached !== undefined) {
-			return singletonCached;
+		return registrations;
+	}
+	private resolveToken(
+		token: unknown,
+		required: boolean,
+		context: ResolutionContext = { path: [], singleton: false },
+	): unknown {
+		const registrations = this.lookup(token, required);
+		if (!registrations) {
+			return undefined;
 		}
-
-		if (registration.lifetime === 'scoped' && this.singletonDepth > 0) {
+		const registration = registrations[registrations.length - 1] as Registration;
+		this.check(token, registration, context);
+		return this.instantiate(token, registration, context);
+	}
+	private resolveAllTokens(
+		token: unknown,
+		required: boolean,
+		context: ResolutionContext = { path: [], singleton: false },
+	): unknown[] | undefined {
+		const registrations = this.lookup(token, required);
+		if (!registrations) {
+			return undefined;
+		}
+		for (const registration of registrations) {
+			this.check(token, registration, context);
+		}
+		return registrations.map(registration => this.instantiate(token, registration, context));
+	}
+	private instantiate(token: unknown, registration: Registration, context: ResolutionContext): unknown {
+		if (registration.lifetime === 'scoped' && context.singleton) {
 			throw new ContainerError(
 				`Captive dependency detected: scoped token "${tokenToString(token)}" cannot be resolved inside a singleton factory. Scoped instances must not be captured by singletons.`,
 			);
 		}
-
-		const scopedCached = this.scopedCache.get(registration as Registration);
-
-		if (scopedCached !== undefined) {
-			return scopedCached;
-		}
-
-		if (this.resolvingTokens.has(token)) {
-			throw new ContainerError(`Circular dependency detected: ${buildCircularPath(this.resolvingTokens, token)}`);
-		}
-
-		this.resolvingTokens.add(token);
-
+		let cache = this.scopedCache;
 		if (registration.lifetime === 'singleton') {
-			this.singletonDepth++;
+			cache = this.singletonCache;
 		}
-
+		if (registration.lifetime !== 'transient' && cache.get(registration) !== undefined) {
+			return cache.get(registration);
+		}
+		const construction = context.construction ?? [];
+		const activeTokens = new Set(construction.filter(frame => frame.active).map(frame => frame.token));
+		if (activeTokens.has(token)) {
+			throw new ContainerError(`Circular dependency detected: ${buildCircularPath(activeTokens, token)}`);
+		}
+		const frame: ConstructionFrame = { active: true, token };
+		const childContext: ResolutionContext = {
+			construction: [...construction, frame],
+			path: [...context.path, token],
+			requester: this.describe(token, registration),
+			singleton: context.singleton || registration.lifetime === 'singleton',
+		};
+		// 呼出元を closure に保持し、await 後の解決でも同じ方針を適用する。
+		const resolver = Object.freeze({
+			resolve: (target: unknown) => this.resolveToken(target, true, childContext),
+			resolveAll: (target: unknown) => this.resolveAllTokens(target, true, childContext),
+			tryResolve: (target: unknown) => this.resolveToken(target, false, childContext),
+			tryResolveAll: (target: unknown) => this.resolveAllTokens(target, false, childContext),
+		});
+		let pending = false;
 		try {
-			const instance = registration.factory(
-				this as unknown as Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>,
-			);
-
-			if (registration.lifetime === 'singleton') {
-				this.singletonCache.set(registration as Registration, instance);
-			} else if (registration.lifetime === 'scoped') {
-				this.scopedCache.set(registration as Registration, instance);
+			const instance = registration.factory(resolver as Resolver<never, never>);
+			if (instance instanceof Promise) {
+				void instance.then(
+					() => {
+						frame.active = false;
+					},
+					() => {
+						frame.active = false;
+					},
+				);
+				pending = true;
 			}
-
+			if (registration.lifetime !== 'transient') {
+				cache.set(registration, instance);
+			}
 			return instance;
 		} finally {
-			if (registration.lifetime === 'singleton') {
-				this.singletonDepth--;
+			if (!pending) {
+				frame.active = false;
 			}
-			this.resolvingTokens.delete(token);
-		}
-	}
-
-	/**
-	 * Internal resolution logic shared by resolveAll and tryResolveAll.
-	 * Resolves all registered factories for the token.
-	 *
-	 * @param token Token to resolve
-	 * @param required If true, throws when the token is not registered. If false, returns undefined.
-	 * @returns An array of resolved instances, or undefined if not registered and required is false
-	 */
-	private resolveAllTokens(token: unknown, required: boolean): unknown[] | undefined {
-		if (this.disposed) {
-			throw new ContainerError('Cannot resolve from a disposed scope.');
-		}
-
-		const registrations = this.registrations.get(token);
-
-		if (registrations === undefined || registrations.length === 0) {
-			if (required) {
-				throw new ContainerError(`Token "${tokenToString(token)}" is not registered.`);
-			}
-
-			return undefined;
-		}
-
-		if (this.resolvingTokens.has(token)) {
-			throw new ContainerError(`Circular dependency detected: ${buildCircularPath(this.resolvingTokens, token)}`);
-		}
-
-		this.resolvingTokens.add(token);
-
-		try {
-			return registrations.map(registration => {
-				const reg = registration as {
-					readonly factory: (resolver: Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>) => unknown;
-					readonly lifetime: Lifetime;
-				};
-
-				const singletonCached = this.singletonCache.get(registration);
-
-				if (singletonCached !== undefined) {
-					return singletonCached;
-				}
-
-				if (reg.lifetime === 'scoped' && this.singletonDepth > 0) {
-					throw new ContainerError(
-						`Captive dependency detected: scoped token "${tokenToString(token)}" cannot be resolved inside a singleton factory. Scoped instances must not be captured by singletons.`,
-					);
-				}
-
-				const scopedCached = this.scopedCache.get(registration);
-
-				if (scopedCached !== undefined) {
-					return scopedCached;
-				}
-
-				if (reg.lifetime === 'singleton') {
-					this.singletonDepth++;
-				}
-
-				try {
-					const instance = reg.factory(
-						this as unknown as Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>,
-					);
-
-					if (reg.lifetime === 'singleton') {
-						this.singletonCache.set(registration, instance);
-					} else if (reg.lifetime === 'scoped') {
-						this.scopedCache.set(registration, instance);
-					}
-
-					return instance;
-				} finally {
-					if (reg.lifetime === 'singleton') {
-						this.singletonDepth--;
-					}
-				}
-			});
-		} finally {
-			this.resolvingTokens.delete(token);
 		}
 	}
 }

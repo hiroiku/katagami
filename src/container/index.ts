@@ -1,44 +1,108 @@
-import { type ContainerInternals, INTERNALS } from '../internal.js';
+import { type Callable, type EntrypointFactory, isEntrypoint } from '../entrypoint/index.js';
+import { ContainerError } from '../error/index.js';
+import { type ContainerInternals, INTERNALS, type REGISTRATION_STATE } from '../internal.js';
+import {
+	type AnyMetadataEntry,
+	type AnyMetadataKey,
+	type MetadataKeyOf,
+	type MetadataReader,
+	type RegistrationArguments,
+	readMetadata,
+	validateMetadataKeys,
+} from '../metadata/index.js';
 import type { AbstractConstructor, Lifetime, Registration, Resolver } from '../resolver/index.js';
 
-/**
- * Create a new DI container.
- *
- * Pass an interface as generic T to fix the PropertyKey token type map upfront (order-independent).
- * Class tokens are accumulated via registerSingleton/registerTransient method chaining (order-dependent).
- *
- * @example
- * ```ts
- * interface Services { SampleController: string }
- * const c = createContainer<Services>()
- *   .registerSingleton(TextGenerationService, () => new MastraTextGenerationService())
- *   .registerTransient(GenerateTextUseCase, r => new GenerateTextUseCase(r.resolve(TextGenerationService)));
- * ```
- */
+export type RegisteredTokens<C> = C extends { readonly [REGISTRATION_STATE]: infer S }
+	? S extends { readonly untracked: true }
+		? never
+		: S extends { readonly token: infer K }
+			? K
+			: never
+	: never;
+
+export interface RegistrationState {
+	readonly token: unknown;
+	readonly metadata: AnyMetadataKey;
+	readonly callable: Callable | never;
+}
+type State<K, E extends readonly AnyMetadataEntry[], F = never> = {
+	readonly token: K;
+	readonly metadata: MetadataKeyOf<E[number]>;
+	readonly callable: F;
+};
+type Replace<S, K, N> = (unknown extends S ? UntrackedState : Exclude<S, { readonly token: K }>) | N;
+type UntrackedState<K = unknown> = {
+	readonly token: K;
+	readonly metadata: never;
+	readonly callable: never;
+	readonly untracked: true;
+};
+type SourceState<S, K> = unknown extends S
+	? UntrackedState<K>
+	: S extends { readonly untracked: true }
+		? UntrackedState<K>
+		: S;
+type SourceTokens<S, K> = unknown extends S
+	? K
+	: S extends { readonly untracked: true }
+		? K
+		: S extends { readonly token: infer Token }
+			? Token
+			: never;
+type Append<S, K, E extends readonly AnyMetadataEntry[], F = never> = unknown extends S
+	? [MetadataKeyOf<E[number]> | F] extends [never]
+		? unknown
+		: UntrackedState | State<K, E, F>
+	: Replace<
+			S,
+			K,
+			{
+				readonly token: K;
+				readonly metadata: [Extract<S, { readonly token: K }>] extends [never]
+					? MetadataKeyOf<E[number]>
+					: Extract<
+							Extract<S, { readonly token: K }> extends { readonly metadata: infer M } ? M : never,
+							MetadataKeyOf<E[number]>
+						>;
+				readonly callable: F;
+			}
+		>;
+type PolicyState<S> = S extends { readonly metadata: infer M; readonly callable: infer F }
+	? [M | F] extends [never]
+		? never
+		: S
+	: never;
+type Merge<S, K, N> = unknown extends S
+	? [PolicyState<N>] extends [never]
+		? unknown
+		: Replace<S, K, N>
+	: Replace<S, K, N>;
+type MissingMetadata<R, S> = unknown extends S ? R : S extends { readonly metadata: infer M } ? Exclude<R, M> : never;
+
+/** 必須属性を指定しない既存の生成形式も維持する。 */
+export function createContainer<const Required extends readonly AnyMetadataKey[]>(options: {
+	readonly requiredMetadata: Required;
+}): Container<Record<never, never>, never, never, Record<never, never>, never, never, Required, never>;
+export function createContainer<T, ScopedT, const Required extends readonly AnyMetadataKey[]>(options: {
+	readonly requiredMetadata: Required;
+}): Container<T, never, never, ScopedT, never, never, Required, never>;
 export function createContainer<T = Record<never, never>, ScopedT = Record<never, never>>(): Container<
 	T,
 	never,
 	never,
-	ScopedT
-> {
-	return new Container();
+	ScopedT,
+	never,
+	never,
+	readonly [],
+	[keyof T | keyof ScopedT] extends [never] ? never : unknown
+>;
+export function createContainer(options?: {
+	readonly requiredMetadata: readonly AnyMetadataKey[];
+}): Container<unknown, never, never, unknown, never, never, readonly AnyMetadataKey[]> {
+	return new Container(options);
 }
 
-/**
- * Lightweight DI container — registration only.
- *
- * Provides type inference through method chaining with registerSingleton/registerTransient/registerScoped.
- * Resolution is performed through a Scope created via `createScope(container)`.
- *
- * Registering the same token multiple times accumulates all factories.
- *
- * @template T PropertyKey-based token type map (defined via interface, order-independent)
- * @template Sync Union of registered sync class constructors (accumulated via chaining, order-dependent)
- * @template Async Union of registered async class constructors (accumulated via chaining, order-dependent)
- * @template ScopedT PropertyKey-based token type map for scoped registrations
- * @template ScopedSync Union of scoped sync class constructors (accumulated via chaining, order-dependent)
- * @template ScopedAsync Union of scoped async class constructors (accumulated via chaining, order-dependent)
- */
+/** 通常の factory と lifetime を登録し、属性と公開操作の型をチェーンで保持する。 */
 export class Container<
 	T = Record<never, never>,
 	Sync extends AbstractConstructor = never,
@@ -46,23 +110,22 @@ export class Container<
 	ScopedT = Record<never, never>,
 	ScopedSync extends AbstractConstructor = never,
 	ScopedAsync extends AbstractConstructor = never,
+	Required extends readonly AnyMetadataKey[] = readonly [],
+	Registrations = unknown,
 > {
-	private readonly registrations: Map<unknown, Registration[]>;
-	private readonly singletonCache: Map<Registration, unknown>;
+	private readonly registrations = new Map<unknown, Registration[]>();
+	private readonly singletonCache = new Map<Registration, unknown>();
+	private readonly requiredMetadata: readonly AnyMetadataKey[];
 	private disposed = false;
-
-	/**
-	 * Internal state accessor for extension modules (scope, disposable).
-	 *
-	 * @internal
-	 */
-	public readonly [INTERNALS]: ContainerInternals;
-
-	public constructor() {
-		this.registrations = new Map();
-		this.singletonCache = new Map();
+	public declare readonly [REGISTRATION_STATE]: Registrations;
+	public readonly [INTERNALS]: ContainerInternals & { readonly kind: 'container' };
+	public constructor(options?: { readonly requiredMetadata: Required }) {
+		this.requiredMetadata = [...(options?.requiredMetadata ?? [])];
+		validateMetadataKeys(this.requiredMetadata);
 		this[INTERNALS] = {
+			beforeResolve: [],
 			isDisposed: () => this.disposed,
+			kind: 'container',
 			markDisposed: () => {
 				this.disposed = true;
 			},
@@ -71,164 +134,361 @@ export class Container<
 			singletonCache: this.singletonCache,
 		};
 	}
-
-	/**
-	 * Register a factory function as a singleton for the given token.
-	 *
-	 * Creates the instance on the first resolve and returns the cached value thereafter.
-	 * If the same token is registered multiple times, all factories are accumulated.
-	 * `resolve()` returns the last registered instance; `resolveAll()` returns all.
-	 *
-	 * @param token Any value to use as a token
-	 * @param factory Factory function that receives a resolver and returns an instance
-	 * @returns The container for method chaining
-	 */
-	public registerSingleton<V>(
+	/** 同じ container で共有する依存を登録する。要求に依存する処理は scoped にする。 */
+	public registerSingleton<
+		K extends PropertyKey,
+		F extends Callable,
+		const E extends readonly AnyMetadataEntry[] = readonly [],
+	>(
+		token: K,
+		factory: ((resolver: Resolver<T, Sync, Async>) => F) & EntrypointFactory<Resolver<T, Sync, Async>, F>,
+		...options: RegistrationArguments<Required, E>
+	): Container<
+		Omit<T, K> & Record<K, F>,
+		Sync,
+		Async,
+		ScopedT,
+		ScopedSync,
+		ScopedAsync,
+		Required,
+		Append<Registrations, K, E, F>
+	>;
+	public registerSingleton<
+		K extends PropertyKey,
+		F extends Callable,
+		const E extends readonly AnyMetadataEntry[] = readonly [],
+	>(
+		token: K,
+		factory: EntrypointFactory<Resolver<T, Sync, Async>, F>,
+		...options: RegistrationArguments<Required, E>
+	): Container<
+		Omit<T, K> & Record<K, Promise<F>>,
+		Sync,
+		Async,
+		ScopedT,
+		ScopedSync,
+		ScopedAsync,
+		Required,
+		Append<Registrations, K, E, F>
+	>;
+	public registerSingleton<V, const E extends readonly AnyMetadataEntry[] = readonly []>(
 		token: AbstractConstructor<V>,
 		factory: (resolver: Resolver<T, Sync, Async>) => Promise<V>,
-	): Container<T, Sync, Async | AbstractConstructor<V>, ScopedT, ScopedSync, ScopedAsync>;
-	public registerSingleton<V>(
+		...options: RegistrationArguments<Required, E>
+	): Container<
+		T,
+		Sync,
+		Async | AbstractConstructor<V>,
+		ScopedT,
+		ScopedSync,
+		ScopedAsync,
+		Required,
+		Append<Registrations, AbstractConstructor<V>, E>
+	>;
+	public registerSingleton<V, const E extends readonly AnyMetadataEntry[] = readonly []>(
 		token: AbstractConstructor<V>,
 		factory: (resolver: Resolver<T, Sync, Async>) => V,
-	): Container<T, Sync | AbstractConstructor<V>, Async, ScopedT, ScopedSync, ScopedAsync>;
-	public registerSingleton<K extends PropertyKey, V>(
+		...options: RegistrationArguments<Required, E>
+	): Container<
+		T,
+		Sync | AbstractConstructor<V>,
+		Async,
+		ScopedT,
+		ScopedSync,
+		ScopedAsync,
+		Required,
+		Append<Registrations, AbstractConstructor<V>, E>
+	>;
+	public registerSingleton<K extends PropertyKey, V, const E extends readonly AnyMetadataEntry[] = readonly []>(
 		token: K,
 		factory: (resolver: Resolver<T, Sync, Async>) => V,
-	): Container<Record<K, V> & T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
-	public registerSingleton<V>(
+		...options: RegistrationArguments<Required, E>
+	): Container<
+		Omit<T, K> & Record<K, V>,
+		Sync,
+		Async,
+		ScopedT,
+		ScopedSync,
+		ScopedAsync,
+		Required,
+		Append<Registrations, K, E>
+	>;
+	public registerSingleton<V, const E extends readonly AnyMetadataEntry[] = readonly []>(
 		token: unknown,
 		factory: (resolver: Resolver<T, Sync, Async>) => V,
-	): Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
+		...options: RegistrationArguments<Required, E>
+	): Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Required, Registrations | State<unknown, E>>;
 	public registerSingleton(
 		token: unknown,
 		factory: (resolver: Resolver<T, Sync, Async>) => unknown,
-	): Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync> {
-		return this.addRegistration(token, factory, 'singleton');
+		...options: readonly [{ readonly metadata?: readonly AnyMetadataEntry[] }?]
+	): unknown {
+		return this.addRegistration(token, factory as Registration['factory'], 'singleton', options[0]?.metadata ?? []);
 	}
-
-	/**
-	 * Register a factory function as transient for the given token.
-	 *
-	 * Creates a new instance via the factory function on every resolve.
-	 * If the same token is registered multiple times, all factories are accumulated.
-	 * `resolve()` returns the last registered instance; `resolveAll()` returns all.
-	 *
-	 * @param token Any value to use as a token
-	 * @param factory Factory function that receives a resolver and returns an instance
-	 * @returns The container for method chaining
-	 */
-	public registerTransient<V>(
+	/** 解決のたびに生成する依存を登録する。 */
+	public registerTransient<
+		K extends PropertyKey,
+		F extends Callable,
+		const E extends readonly AnyMetadataEntry[] = readonly [],
+	>(
+		token: K,
+		factory: ((resolver: Resolver<T, Sync, Async>) => F) & EntrypointFactory<Resolver<T, Sync, Async>, F>,
+		...options: RegistrationArguments<Required, E>
+	): Container<
+		Omit<T, K> & Record<K, F>,
+		Sync,
+		Async,
+		ScopedT,
+		ScopedSync,
+		ScopedAsync,
+		Required,
+		Append<Registrations, K, E, F>
+	>;
+	public registerTransient<
+		K extends PropertyKey,
+		F extends Callable,
+		const E extends readonly AnyMetadataEntry[] = readonly [],
+	>(
+		token: K,
+		factory: EntrypointFactory<Resolver<T, Sync, Async>, F>,
+		...options: RegistrationArguments<Required, E>
+	): Container<
+		Omit<T, K> & Record<K, Promise<F>>,
+		Sync,
+		Async,
+		ScopedT,
+		ScopedSync,
+		ScopedAsync,
+		Required,
+		Append<Registrations, K, E, F>
+	>;
+	public registerTransient<V, const E extends readonly AnyMetadataEntry[] = readonly []>(
 		token: AbstractConstructor<V>,
 		factory: (resolver: Resolver<T, Sync, Async>) => Promise<V>,
-	): Container<T, Sync, Async | AbstractConstructor<V>, ScopedT, ScopedSync, ScopedAsync>;
-	public registerTransient<V>(
+		...options: RegistrationArguments<Required, E>
+	): Container<
+		T,
+		Sync,
+		Async | AbstractConstructor<V>,
+		ScopedT,
+		ScopedSync,
+		ScopedAsync,
+		Required,
+		Append<Registrations, AbstractConstructor<V>, E>
+	>;
+	public registerTransient<V, const E extends readonly AnyMetadataEntry[] = readonly []>(
 		token: AbstractConstructor<V>,
 		factory: (resolver: Resolver<T, Sync, Async>) => V,
-	): Container<T, Sync | AbstractConstructor<V>, Async, ScopedT, ScopedSync, ScopedAsync>;
-	public registerTransient<K extends PropertyKey, V>(
+		...options: RegistrationArguments<Required, E>
+	): Container<
+		T,
+		Sync | AbstractConstructor<V>,
+		Async,
+		ScopedT,
+		ScopedSync,
+		ScopedAsync,
+		Required,
+		Append<Registrations, AbstractConstructor<V>, E>
+	>;
+	public registerTransient<K extends PropertyKey, V, const E extends readonly AnyMetadataEntry[] = readonly []>(
 		token: K,
 		factory: (resolver: Resolver<T, Sync, Async>) => V,
-	): Container<Record<K, V> & T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
-	public registerTransient<V>(
+		...options: RegistrationArguments<Required, E>
+	): Container<
+		Omit<T, K> & Record<K, V>,
+		Sync,
+		Async,
+		ScopedT,
+		ScopedSync,
+		ScopedAsync,
+		Required,
+		Append<Registrations, K, E>
+	>;
+	public registerTransient<V, const E extends readonly AnyMetadataEntry[] = readonly []>(
 		token: unknown,
 		factory: (resolver: Resolver<T, Sync, Async>) => V,
-	): Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
+		...options: RegistrationArguments<Required, E>
+	): Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Required, Registrations | State<unknown, E>>;
 	public registerTransient(
 		token: unknown,
 		factory: (resolver: Resolver<T, Sync, Async>) => unknown,
-	): Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync> {
-		return this.addRegistration(token, factory, 'transient');
+		...options: readonly [{ readonly metadata?: readonly AnyMetadataEntry[] }?]
+	): unknown {
+		return this.addRegistration(token, factory as Registration['factory'], 'transient', options[0]?.metadata ?? []);
 	}
-
-	/**
-	 * Register a factory function as scoped for the given token.
-	 *
-	 * Within a scope, creates the instance on the first resolve and returns the cached value thereafter.
-	 * Each scope maintains its own cache, so different scopes produce different instances.
-	 * Scoped tokens cannot be resolved from the root container — use createScope() first.
-	 *
-	 * @param token Any value to use as a token
-	 * @param factory Factory function that receives a resolver and returns an instance
-	 * @returns The container for method chaining
-	 */
-	public registerScoped<V>(
+	/** 同じ scope 内で共有する依存を登録する。 */
+	public registerScoped<
+		K extends PropertyKey,
+		F extends Callable,
+		const E extends readonly AnyMetadataEntry[] = readonly [],
+	>(
+		token: K,
+		factory: ((resolver: Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>) => F) &
+			EntrypointFactory<Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>, F>,
+		...options: RegistrationArguments<Required, E>
+	): Container<
+		T,
+		Sync,
+		Async,
+		Omit<ScopedT, K> & Record<K, F>,
+		ScopedSync,
+		ScopedAsync,
+		Required,
+		Append<Registrations, K, E, F>
+	>;
+	public registerScoped<
+		K extends PropertyKey,
+		F extends Callable,
+		const E extends readonly AnyMetadataEntry[] = readonly [],
+	>(
+		token: K,
+		factory: EntrypointFactory<Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>, F>,
+		...options: RegistrationArguments<Required, E>
+	): Container<
+		T,
+		Sync,
+		Async,
+		Omit<ScopedT, K> & Record<K, Promise<F>>,
+		ScopedSync,
+		ScopedAsync,
+		Required,
+		Append<Registrations, K, E, F>
+	>;
+	public registerScoped<V, const E extends readonly AnyMetadataEntry[] = readonly []>(
 		token: AbstractConstructor<V>,
 		factory: (resolver: Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>) => Promise<V>,
-	): Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync | AbstractConstructor<V>>;
-	public registerScoped<V>(
+		...options: RegistrationArguments<Required, E>
+	): Container<
+		T,
+		Sync,
+		Async,
+		ScopedT,
+		ScopedSync,
+		ScopedAsync | AbstractConstructor<V>,
+		Required,
+		Append<Registrations, AbstractConstructor<V>, E>
+	>;
+	public registerScoped<V, const E extends readonly AnyMetadataEntry[] = readonly []>(
 		token: AbstractConstructor<V>,
 		factory: (resolver: Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>) => V,
-	): Container<T, Sync, Async, ScopedT, ScopedSync | AbstractConstructor<V>, ScopedAsync>;
-	public registerScoped<K extends PropertyKey, V>(
+		...options: RegistrationArguments<Required, E>
+	): Container<
+		T,
+		Sync,
+		Async,
+		ScopedT,
+		ScopedSync | AbstractConstructor<V>,
+		ScopedAsync,
+		Required,
+		Append<Registrations, AbstractConstructor<V>, E>
+	>;
+	public registerScoped<K extends PropertyKey, V, const E extends readonly AnyMetadataEntry[] = readonly []>(
 		token: K,
 		factory: (resolver: Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>) => V,
-	): Container<T, Sync, Async, Record<K, V> & ScopedT, ScopedSync, ScopedAsync>;
-	public registerScoped<V>(
+		...options: RegistrationArguments<Required, E>
+	): Container<
+		T,
+		Sync,
+		Async,
+		Omit<ScopedT, K> & Record<K, V>,
+		ScopedSync,
+		ScopedAsync,
+		Required,
+		Append<Registrations, K, E>
+	>;
+	public registerScoped<V, const E extends readonly AnyMetadataEntry[] = readonly []>(
 		token: unknown,
 		factory: (resolver: Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>) => V,
-	): Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
+		...options: RegistrationArguments<Required, E>
+	): Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Required, Registrations | State<unknown, E>>;
 	public registerScoped(
 		token: unknown,
 		factory: (resolver: Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>) => unknown,
-	): Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync> {
-		return this.addRegistration(token, factory, 'scoped');
+		...options: readonly [{ readonly metadata?: readonly AnyMetadataEntry[] }?]
+	): unknown {
+		return this.addRegistration(token, factory as Registration['factory'], 'scoped', options[0]?.metadata ?? []);
 	}
 
-	/**
-	 * Apply all registrations from another container (module) to this container.
-	 *
-	 * Copies registration entries (factory + lifetime) by replacing existing entries for each token.
-	 * Singleton instance caches are not shared — each container manages its own.
-	 *
-	 * @param source A container whose registrations will be copied into this container
-	 * @returns The container for method chaining
-	 */
+	/** 登録済みの最後の属性だけを読み、factory は実行しない。 */
+	public getMetadata<V>(token: AbstractConstructor<V> & (Sync | Async | ScopedSync | ScopedAsync)): MetadataReader;
+	public getMetadata<K extends keyof (T & ScopedT)>(token: K): MetadataReader;
+	public getMetadata(token: unknown): MetadataReader {
+		const entries = this.registrations.get(token);
+		if (!entries?.length) {
+			throw new ContainerError('Token is not registered.');
+		}
+		return (entries[entries.length - 1] as Registration).metadata;
+	}
+
+	/** 属性を全件検証してから、トークンごとに登録と公開性を置き換える。 */
 	public use<
 		MT,
-		MSync extends AbstractConstructor,
-		MAsync extends AbstractConstructor,
-		MScopedT,
-		MScopedSync extends AbstractConstructor,
-		MScopedAsync extends AbstractConstructor,
+		MS extends AbstractConstructor,
+		MA extends AbstractConstructor,
+		MST,
+		MSS extends AbstractConstructor,
+		MSA extends AbstractConstructor,
+		MR extends readonly AnyMetadataKey[],
+		State,
 	>(
-		source: Container<MT, MSync, MAsync, MScopedT, MScopedSync, MScopedAsync>,
+		source: Container<MT, MS, MA, MST, MSS, MSA, MR, State> &
+			([MissingMetadata<Required[number], State>] extends [never]
+				? unknown
+				: { readonly missingRequiredMetadata: never }),
 	): Container<
-		T & MT,
-		Sync | MSync,
-		Async | MAsync,
-		ScopedT & MScopedT,
-		ScopedSync | MScopedSync,
-		ScopedAsync | MScopedAsync
+		Omit<T, keyof MT> & MT,
+		Sync | MS,
+		Async | MA,
+		Omit<ScopedT, keyof MST> & MST,
+		ScopedSync | MSS,
+		ScopedAsync | MSA,
+		Required,
+		Merge<
+			Registrations,
+			SourceTokens<State, keyof MT | keyof MST | MS | MA | MSS | MSA>,
+			SourceState<State, keyof MT | keyof MST | MS | MA | MSS | MSA>
+		>
 	>;
-	public use(source: Container): Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync> {
+	public use(source: { readonly [INTERNALS]: ContainerInternals }): unknown {
+		if (this.disposed) {
+			throw new ContainerError('Cannot register on a disposed container.');
+		}
+		for (const registrations of source[INTERNALS].registrations.values()) {
+			for (const registration of registrations) {
+				for (const key of this.requiredMetadata) {
+					if (!registration.metadata.has(key)) {
+						throw new ContainerError('Required metadata is missing.');
+					}
+				}
+			}
+		}
 		for (const [token, registrations] of source[INTERNALS].registrations) {
 			this.registrations.set(token, [...registrations]);
 		}
-
 		return this;
 	}
-
-	/**
-	 * Add a registration entry. Accumulates registrations for the same token.
-	 *
-	 * @param token Token
-	 * @param factory Factory function
-	 * @param lifetime Lifetime of the registration
-	 * @returns The container for method chaining
-	 */
 	private addRegistration(
 		token: unknown,
-		factory: (resolver: Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>) => unknown,
+		factory: Registration['factory'],
 		lifetime: Lifetime,
-	): Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync> {
-		const existing = this.registrations.get(token);
-
-		if (existing !== undefined) {
-			existing.push({ factory, lifetime } as Registration);
-		} else {
-			this.registrations.set(token, [{ factory, lifetime } as Registration]);
+		entries: readonly AnyMetadataEntry[],
+	): this {
+		if (this.disposed) {
+			throw new ContainerError('Cannot register on a disposed container.');
 		}
-
+		const metadata = readMetadata(entries, this.requiredMetadata);
+		const registration: Registration = Object.freeze({
+			entrypoint: isEntrypoint(factory),
+			factory,
+			lifetime,
+			metadata,
+		});
+		const existing = this.registrations.get(token);
+		if (existing) {
+			existing.push(registration);
+		} else {
+			this.registrations.set(token, [registration]);
+		}
 		return this;
 	}
 }

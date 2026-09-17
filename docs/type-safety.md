@@ -113,10 +113,9 @@ Use a predeclared map when order independence is useful and verify the compositi
 ## Runtime checks and limits
 
 Runtime checks report missing registrations, disposed scopes and circular resolution paths.
-The captive-dependency guard detects scoped resolution in an active singleton call chain,
-including indirect synchronous calls. It does not prove all lifetime relationships: in particular,
-do not rely on it for work resumed after an `await` or for dependencies captured from another scope.
-Use the typed factory API and runtime tests together.
+factory に渡す resolver は呼出元と singleton の寿命制約を保持し、`await` 後の scoped 解決も検査します。別の scope を closure で捕捉した依存までは保証しません。型付き factory API と runtime テストを併用してください。
+
+必須属性と公開操作の追加保証・型消去時の制限は[登録の属性と公開操作](./registration-policies.ja.md)を参照してください。
 
 ## Verification
 

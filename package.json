@@ -35,6 +35,16 @@
 				"types": "./dist/lazy/index.d.cts",
 				"default": "./dist/lazy/index.cjs"
 			}
+		},
+		"./invocation": {
+			"import": {
+				"types": "./dist/invocation/index.d.ts",
+				"default": "./dist/invocation/index.js"
+			},
+			"require": {
+				"types": "./dist/invocation/index.d.cts",
+				"default": "./dist/invocation/index.cjs"
+			}
 		}
 	},
 	"main": "./dist/index.cjs",

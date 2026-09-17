@@ -1,3 +1,4 @@
+import type { MetadataReader } from '../metadata/index.js';
 export type AbstractConstructor<T = unknown> = abstract new (...args: never[]) => T;
 
 /**
@@ -74,6 +75,8 @@ export type Lifetime = 'singleton' | 'transient' | 'scoped';
  * Factory registration entry.
  */
 export interface Registration {
+	readonly metadata: MetadataReader;
+	readonly entrypoint: boolean;
 	/**
 	 * Factory function.
 	 *

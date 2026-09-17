@@ -184,3 +184,7 @@ Default accumulated registration provides the registration-order checks describe
 | `lazy(scope, classToken)` from `katagami/lazy` | Defer synchronous resolution until first access |
 | `ContainerError` | Runtime error for missing registrations, cycles and invalid scope operations |
 | `Resolver` (type export) | Factory resolver type; retain inferred generics when extracting factories |
+
+## 登録の属性と公開操作
+
+必須 metadata、`beforeResolve`、`entrypoint`、`katagami/invocation` は[専用ガイド](./registration-policies.ja.md)を参照してください。既存の lifetime と `.use()` をそのまま利用できます。

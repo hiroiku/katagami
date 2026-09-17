@@ -1,5 +1,6 @@
 import type { Container } from '../container/index.js';
-import { type ContainerInternals, INTERNALS, type TYPE_STATE } from '../internal.js';
+import { type ContainerInternals, INTERNALS, type REGISTRATION_STATE, type TYPE_STATE } from '../internal.js';
+import type { AnyMetadataKey } from '../metadata/index.js';
 import type { AbstractConstructor, Resolver } from '../resolver/index.js';
 import type { Scope } from '../scope/index.js';
 
@@ -24,8 +25,12 @@ export interface DisposableContainer<
 	ScopedT = Record<never, never>,
 	ScopedSync extends AbstractConstructor = never,
 	ScopedAsync extends AbstractConstructor = never,
+	Required extends readonly AnyMetadataKey[] = readonly [],
+	Registrations = never,
 > extends AsyncDisposable {
-	readonly [INTERNALS]: ContainerInternals;
+	readonly [INTERNALS]: ContainerInternals & { readonly kind: 'container' };
+	readonly [REGISTRATION_STATE]: Registrations;
+	readonly requiredMetadataType?: Required;
 	readonly [TYPE_STATE]?: {
 		readonly kind: 'container';
 		readonly registrations: readonly [T, Sync, Async, ScopedT, ScopedSync, ScopedAsync];
@@ -51,9 +56,11 @@ export interface DisposableScope<
 	ScopedT = Record<never, never>,
 	ScopedSync extends AbstractConstructor = never,
 	ScopedAsync extends AbstractConstructor = never,
+	Registrations = unknown,
 > extends Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>,
 		AsyncDisposable {
-	readonly [INTERNALS]: ContainerInternals;
+	readonly [INTERNALS]: ContainerInternals & { readonly kind: 'scope' };
+	readonly [REGISTRATION_STATE]: Registrations;
 	readonly [TYPE_STATE]?: {
 		readonly kind: 'scope';
 		readonly registrations: readonly [T, Sync, Async, ScopedT, ScopedSync, ScopedAsync];
@@ -90,9 +97,11 @@ export function disposable<
 	ScopedT,
 	ScopedSync extends AbstractConstructor,
 	ScopedAsync extends AbstractConstructor,
+	Required extends readonly AnyMetadataKey[],
+	Registrations,
 >(
-	container: Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>,
-): DisposableContainer<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
+	container: Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Required, Registrations>,
+): DisposableContainer<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Required, Registrations>;
 export function disposable<
 	T,
 	Sync extends AbstractConstructor,
@@ -100,9 +109,10 @@ export function disposable<
 	ScopedT,
 	ScopedSync extends AbstractConstructor,
 	ScopedAsync extends AbstractConstructor,
+	Registrations,
 >(
-	scope: Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>,
-): DisposableScope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
+	scope: Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Registrations>,
+): DisposableScope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Registrations>;
 export function disposable<C extends { readonly [INTERNALS]: ContainerInternals }>(container: C): C & AsyncDisposable {
 	const asyncDispose = async (): Promise<void> => {
 		const internals = container[INTERNALS];
