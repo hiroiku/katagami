@@ -36,13 +36,13 @@ Katagamiの強みは、**登録からの型推論・コンパイル時のスコ�
 
 ### 他ライブラリとの比較
 
-**8ライブラリ・27項目の比較。2026-09-11確認。** 表中のnpm `latest`安定版と公式資料をもとにしています。[対象バージョン・出典・詳細な注記](./choosing-di.md#comparison-sources)。
+**8ライブラリ・27項目の比較。2026-09-11確認。** 表中のnpm `latest`安定版と公式資料をもとにしています。Katagamiの列は、このリリース（4.0.0）の内容です。[対象バージョン・出典・詳細な注記](./choosing-di.md#comparison-sources)。
 
 **✅ 標準で対応 · ⚠️ 条件付き・異なるモデル・利用側での合成 · ➖ その機能の標準対応なし。** 各セルに具体的なAPIや条件を添えています。
 
 #### 型安全性・導入設定
 
-| 比較項目 | **Katagami**<br>**3.0.3** | InversifyJS<br>8.2.3 | tsyringe<br>4.10.0 | TypeDI<br>0.10.0 | Awilix<br>13.0.5 | NestJS<br>12.0.1 | Effect<br>3.22.2 | typed-inject<br>5.0.0 |
+| 比較項目 | **Katagami**<br>**4.0.0** | InversifyJS<br>8.2.3 | tsyringe<br>4.10.0 | TypeDI<br>0.10.0 | Awilix<br>13.0.5 | NestJS<br>12.0.1 | Effect<br>3.22.2 | typed-inject<br>5.0.0 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **ランタイム要件** | **✅ 通常のTypeScript** | ⚠️ クラスDIにReflectメタデータ | ⚠️ クラスDIにReflectメタデータ | ⚠️ Reflectメタデータ設定 | ✅ DIメタデータ不要 | ⚠️ Nestモジュール・メタデータ | ✅ Effect・Layer API | ✅ 通常のTypeScript |
 | **注入方式** | **明示的なファクトリ・コンストラクタ** | コンストラクタ・プロパティ・ファクトリ | コンストラクタ・ファクトリ | コンストラクタ・プロパティ・ファクトリ | Proxy・Classic・ファクトリ | コンストラクタ・プロパティ・ファクトリ | 関数型サービス・Layer | コンストラクタ・ファクトリ＋`inject` |
@@ -56,7 +56,7 @@ Katagamiの強みは、**登録からの型推論・コンパイル時のスコ�
 
 #### ライフタイム・非同期・リソース破棄
 
-| 比較項目 | **Katagami**<br>**3.0.3** | InversifyJS<br>8.2.3 | tsyringe<br>4.10.0 | TypeDI<br>0.10.0 | Awilix<br>13.0.5 | NestJS<br>12.0.1 | Effect<br>3.22.2 | typed-inject<br>5.0.0 |
+| 比較項目 | **Katagami**<br>**4.0.0** | InversifyJS<br>8.2.3 | tsyringe<br>4.10.0 | TypeDI<br>0.10.0 | Awilix<br>13.0.5 | NestJS<br>12.0.1 | Effect<br>3.22.2 | typed-inject<br>5.0.0 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **ライフタイム** | **✅ Singleton・Transient・Scoped** | ✅ Singleton・Transient・Request | ✅ Singleton・Transient・Resolution・Container | ✅ 共有・Transient | ✅ Singleton・Transient・Scoped | ✅ Singleton・Transient・Request | ⚠️ メモ化／fresh Layer＋Scope | ✅ Singleton・Transient |
 | **リクエスト／Scopedライフタイム³** | **✅ リクエストごとに明示的なScope** | ⚠️ 1回の解決グラフ | ✅ Container／Resolution単位 | ⚠️ 名前付きコンテナ | ✅ リクエストごとに明示的なScope | ✅ HTTPリクエスト単位 | ⚠️ リソースScope | ⚠️ 子injector。Scoped登録なし |
@@ -69,7 +69,7 @@ Katagamiの強みは、**登録からの型推論・コンパイル時のスコ�
 
 #### 合成・拡張機能
 
-| 比較項目 | **Katagami**<br>**3.0.3** | InversifyJS<br>8.2.3 | tsyringe<br>4.10.0 | TypeDI<br>0.10.0 | Awilix<br>13.0.5 | NestJS<br>12.0.1 | Effect<br>3.22.2 | typed-inject<br>5.0.0 |
+| 比較項目 | **Katagami**<br>**4.0.0** | InversifyJS<br>8.2.3 | tsyringe<br>4.10.0 | TypeDI<br>0.10.0 | Awilix<br>13.0.5 | NestJS<br>12.0.1 | Effect<br>3.22.2 | typed-inject<br>5.0.0 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **オプショナル解決** | **✅ `tryResolve`・`tryResolveAll`** | ✅ オプショナルget・inject | ✅ オプショナル注入 | ⚠️ `has`で確認して`get` | ✅ `allowUnregistered` | ✅ オプショナル注入 | ✅ `serviceOption` | ⚠️ オプショナル値を合成 |
 | **複数登録・一括解決** | **✅ `resolveAll`** | ✅ `getAll`・`getAllAsync` | ✅ `injectAll`・`resolveAll` | ✅ `getMany` | ⚠️ コレクション値を登録 | ⚠️ 配列provider | ⚠️ コレクション値を登録 | ⚠️ コレクション値を登録 |
@@ -78,7 +78,7 @@ Katagamiの強みは、**登録からの型推論・コンパイル時のスコ�
 | **自動ロード／検出⁶** | **➖ 明示的な`use()`** | ⚠️ クラスの自動binding | ➖ 明示的な登録 | ➖ 明示的なimport | ✅ `loadModules`（Node） | ⚠️ `DiscoveryService` | ➖ 明示的なLayer | ➖ 明示的なprovider |
 | **モジュールシステム・合成** | **✅ `use()`** | ✅ コンテナモジュール | ✅ `@registry` | ⚠️ 登録をまとめる | ✅ `loadModules`・`register` | ✅ モジュール・動的モジュール | ✅ Layerの合成 | ⚠️ providerチェーンの合成 |
 | **循環依存の検出⁷** | **✅ 実行時に循環経路を表示** | ✅ 実行時に検出 | ⚠️ コンストラクタのエラー・`delay` | ⚠️ 型の遅延参照 | ✅ 実行時に循環経路を表示 | ⚠️ 循環エラー・`forwardRef` | ⚠️ Layerの要求型 | ⚠️ 登録順で依存を制限 |
-| **ミドルウェア／インターセプタ⁶** | **⚠️ 高階ファクトリで合成** | ✅ activation・deactivationフック | ✅ 解決前後のフック | ⚠️ ファクトリをラップ | ⚠️ ファクトリをラップ | ⚠️ Request用。DIフックとは異なる | ⚠️ Effectを合成 | ⚠️ providerの装飾 |
+| **ミドルウェア／インターセプタ⁶** | **⚠️ `beforeResolve`の検査・高階ファクトリで合成** | ✅ activation・deactivationフック | ✅ 解決前後のフック | ⚠️ ファクトリをラップ | ⚠️ ファクトリをラップ | ⚠️ Request用。DIフックとは異なる | ⚠️ Effectを合成 | ⚠️ providerの装飾 |
 | **スナップショット／復元⁶** | **➖** | ✅ `snapshot`・`restore` | ➖ | ➖ | ➖ | ➖ | ➖ | ➖ |
 | **テスト用の差し替え・分離** | **✅ 新しいScope・コンテナ＋`use()`** | ✅ 再binding・スナップショット | ✅ 子コンテナで上書き | ✅ 名前付きコンテナ・reset | ✅ 子Scopeで上書き | ✅ `overrideProvider` | ✅ テスト用Layerに差し替え | ✅ 子injectorで上書き |
 
@@ -92,7 +92,7 @@ Katagamiの強みは、**登録からの型推論・コンパイル時のスコ�
 3. **スコープ：** InversifyJSのRequestは1回の解決グラフで、HTTPリクエストとは異なります。名前付きコンテナ・モジュールのコンテキスト・子injector・EffectのリソースScopeも、それぞれ異なる管理方式です。
 4. **非同期：** Promiseを返せることと、注入前に依存の完了を自動的に待つことは別です。KatagamiはPromiseを型に残し、`await`を明示します。
 5. **破棄：** Katagamiは追加の`disposable()`で`Symbol.dispose`・`Symbol.asyncDispose`・`await using`に連携します。所有権と破棄対象はライブラリごとに異なり、InversifyJSのdeactivationはSingleton、Awilixのdisposerはキャッシュした値が対象です。NestのフックはRequestスコープのクラスには適用されません。
-6. **合成と専用API：** サービスの遅延Proxy・型参照の遅延・モジュールの遅延ロードは別の機能です。自動binding・検出も、ファイルの自動ロードとは異なります。Katagamiの`use()`は登録をコピーし、コンテナ自体は変更可能です。ファクトリのラップは専用インターセプタではなく、新しいコンテナでの分離はスナップショットではありません。[合成機能の詳細](./choosing-di.md#composition-and-tooling)。
+6. **合成と専用API：** サービスの遅延Proxy・型参照の遅延・モジュールの遅延ロードは別の機能です。自動binding・検出も、ファイルの自動ロードとは異なります。Katagamiの`use()`は登録をコピーし、コンテナ自体は変更可能です。ファクトリのラップは専用インターセプタではありません。`beforeResolve`は解決を拒否できますが、結果を置き換えることはできません。新しいコンテナでの分離はスナップショットではありません。[合成機能の詳細](./choosing-di.md#composition-and-tooling)。
 7. **循環依存：** 実行時の循環検出・参照の遅延・依存の型検査は異なる仕組みです。⚠️は汎用的な循環検出器の存在を意味しません。また、実行時の検出が、あらゆる非同期デッドロックの検出を保証するわけではありません。
 
 </details>
@@ -127,6 +127,7 @@ Singleton・Transient・Scoped、use()によるモジュール合成、非同期
 - [AIコーディングガイド（英語）](./ai-coding-agents.md)
 - [型の保証範囲（英語）](./type-safety.md)
 - [API・利用ガイド（英語）](./guide.md)
+- [登録の属性と公開操作（英語）](./registration-policies.md)、[日本語版](./registration-policies.ja.md)
 - [リクエストスコープのスターター（英語）](../examples/request-scope/README.md)
 - [DIの選び方（英語）](./choosing-di.md)
 - [AIと型に関する日本語記事](./articles/ai-coding-agents.ja.md)

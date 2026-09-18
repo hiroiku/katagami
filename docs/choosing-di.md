@@ -37,12 +37,12 @@ typing, mutable aliases and predeclared-map boundaries.
 Reviewed **2026-09-11**. Competitor versions are the npm `latest` dist-tag versions observed on that date,
 not prerelease versions or unreleased features from repository default branches. TypeDI refers to
 the `typedi` package maintained under TypeStack, not similarly named forks. NestJS's version is
-the version of `@nestjs/core`. The comparison uses Effect **3** documentation explicitly. Katagami 3.0.3 is this documentation
-release; its runtime and public APIs are unchanged from the reviewed 3.0.1 package.
+the version of `@nestjs/core`. The comparison uses Effect **3** documentation explicitly. Katagami entries describe
+this release, 4.0.0.
 
 | Package | Reviewed version and registry metadata | Primary documentation / shipped API |
 | --- | --- | --- |
-| Katagami | [3.0.1](https://registry.npmjs.org/katagami/3.0.1) | [Type guarantees](./type-safety.md), [API guide](./guide.md) |
+| Katagami | [4.0.0](https://registry.npmjs.org/katagami/4.0.0) | [Type guarantees](./type-safety.md), [API guide](./guide.md), [registration policies](./registration-policies.md) |
 | InversifyJS | [8.2.3](https://registry.npmjs.org/inversify/8.2.3) | [8.x setup](https://inversify.io/docs/introduction/getting-started/), [bindings](https://inversify.io/docs/fundamentals/binding/), [container API](https://inversify.io/docs/api/container/) |
 | tsyringe | [4.10.0](https://registry.npmjs.org/tsyringe/4.10.0) | [Release README](https://github.com/microsoft/tsyringe/blob/e033769d97cfb6cc4a8569e2b50eb32015453302/README.md), [container types](https://github.com/microsoft/tsyringe/blob/e033769d97cfb6cc4a8569e2b50eb32015453302/src/types/dependency-container.ts) |
 | TypeDI | [0.10.0](https://registry.npmjs.org/typedi/0.10.0) | [Release source](https://github.com/typestack/typedi/tree/v0.10.0), [container implementation](https://github.com/typestack/typedi/blob/v0.10.0/src/container-instance.class.ts) |
@@ -55,7 +55,7 @@ Versioned npm tarballs were also inspected. A focused TypeScript 5.9.3 check con
 Awilix 13.0.5 infers registered cradle properties and rejects an unknown cradle property, while
 `resolve('missing')` still compiles through its broad overload. The same check confirmed that
 typed-inject 5.0.0 and Katagami 3.0.1 reject an unknown literal token, and that Awilix and
-typed-inject infer a Promise returned by a factory. This is a type check, not a performance benchmark
+typed-inject infer a Promise returned by a factory. Katagami 4.0.0 keeps that rejection in its type tests. This is a type check, not a performance benchmark
 or an exhaustive runtime compatibility test.
 
 ## Reading the comparison
@@ -115,7 +115,7 @@ application code can implement the pattern; it does not claim a dedicated contai
 
 | Library | Optional / multiple resolution | Composition, discovery and extension |
 | --- | --- | --- |
-| Katagami | `tryResolve`, `resolveAll`, `tryResolveAll` | `use()` copies registrations; opt-in `lazy()`; ordinary higher-order factories |
+| Katagami | `tryResolve`, `resolveAll`, `tryResolveAll` | `use()` copies registrations; opt-in `lazy()`; `beforeResolve` checks; ordinary higher-order factories |
 | InversifyJS | Optional get/inject, `getAll`, `getAllAsync` | Container modules/hierarchy, autobinding, contextual constraints, activation/deactivation, snapshot/restore |
 | tsyringe | Optional inject, `injectAll`, `resolveAll` | `@registry`, child containers, before/after resolution interceptors, `delay()`, `predicateAwareClassFactory` |
 | TypeDI | `has` before `get`; `getMany` with multiple registrations | Named containers, factory configuration and service decorators |
@@ -126,7 +126,8 @@ application code can implement the pattern; it does not claim a dedicated contai
 
 Katagami does not implement filesystem auto-discovery or snapshot/restore, and its runtime
 containers are mutable. `use()` and fresh test containers provide explicit composition and test
-substitution. Factory wrappers are an application pattern, not a middleware/interceptor API.
+substitution. Factory wrappers are an application pattern, not a middleware/interceptor API, and
+`beforeResolve` can reject a resolution but does not replace or wrap its result.
 Similarly, a lazy module loader is not the same feature as a proxy that constructs one service on
 first property access, and a resolution graph scope is not an HTTP request scope.
 

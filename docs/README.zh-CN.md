@@ -29,11 +29,11 @@ console.log(greeting);
 
 Katagami 在普通 TypeScript 工厂中结合了**从注册推导类型、编译时作用域限制、零运行时依赖**。无需装饰器或元数据配置，资源清理和延迟解析可通过独立入口按需导入。
 
-**核查日期：2026-09-11。** 对照 npm 稳定版和官方资料；参见[版本与来源](./choosing-di.md#comparison-sources)及[包含异步和清理功能的完整对比](../README.md#library-comparison)。
+**核查日期：2026-09-11。** 对照 npm 稳定版和官方资料；Katagami 一栏描述本次发布（4.0.0）；参见[版本与来源](./choosing-di.md#comparison-sources)及[包含异步和清理功能的完整对比](../README.md#library-comparison)。
 
 | 库／版本 | 依赖类型与注册检查 | 作用域策略 |
 | --- | --- | --- |
-| **Katagami 3.0.3** | **累积字面量、unique symbol 的注册类型，拒绝未注册的必需 token** | **从 Singleton、Transient 工厂的 resolver 类型中排除 Scoped token** |
+| **Katagami 4.0.0** | **累积字面量、unique symbol 的注册类型，拒绝未注册的必需 token** | **从 Singleton、Transient 工厂的 resolver 类型中排除 Scoped token** |
 | InversifyJS 8.2.3 | 有类型的 binding；运行时检查是否已绑定 | binding 的生命周期设置 |
 | tsyringe 4.10.0 | 类与泛型类型；运行时检查注册 | 生命周期设置与子容器 |
 | TypeDI 0.10.0 | 类与 `Token<T>`；运行时检查注册 | 共享、Transient 服务与命名容器 |
@@ -74,6 +74,7 @@ createContainer()
 - [AI 编程指南（英语）](./ai-coding-agents.md)
 - [类型保证范围（英语）](./type-safety.md)
 - [API 与使用指南（英语）](./guide.md)
+- [注册策略与公开操作（英语）](./registration-policies.md)
 - [请求作用域入门示例（英语）](../examples/request-scope/README.md)
 - [DI 选型指南（英语）](./choosing-di.md)
 

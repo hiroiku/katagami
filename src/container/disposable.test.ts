@@ -192,6 +192,25 @@ describe('Container [Symbol.asyncDispose] edge cases', () => {
 	});
 });
 
+describe('Container 生成に失敗した singleton の破棄', () => {
+	test('拒否された非同期 singleton は破棄の失敗として報告されず、cache の消去は保たれる', async () => {
+		const failure = new Error('factory failed');
+		const container = createContainer()
+			.registerSingleton('broken', async () => {
+				throw failure;
+			})
+			.registerSingleton(DisposableService, () => new DisposableService());
+
+		const scope = createScope(container);
+		await expect(scope.resolve('broken')).rejects.toBe(failure);
+		const instance = scope.resolve(DisposableService);
+
+		expect(await disposable(container)[Symbol.asyncDispose]()).toBeUndefined();
+		expect(instance.disposed).toBe(true);
+		expect(scope.resolve(DisposableService)).not.toBe(instance);
+	});
+});
+
 describe('disposed container guards', () => {
 	test('throws ContainerError when creating scope from a disposed container', async () => {
 		const container = disposable(createContainer().registerSingleton(ServiceA, () => new ServiceA()));

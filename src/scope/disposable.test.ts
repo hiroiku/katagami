@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { createContainer } from '../container';
 import { disposable } from '../disposable';
 import { ContainerError } from '../error';
+import { INTERNALS } from '../internal';
 import { createScope } from '.';
 
 // Helper classes for testing
@@ -258,6 +259,130 @@ describe('Scope [Symbol.asyncDispose] edge cases', () => {
 			expect(e).toBeInstanceOf(AggregateError);
 			expect((e as AggregateError).errors).toHaveLength(2);
 		}
+	});
+});
+
+describe('生成に失敗した資源の破棄', () => {
+	test('非同期 factory が拒否された scoped 登録を含む scope は、破棄を正常に完了する', async () => {
+		const failure = new Error('factory failed');
+		const container = createContainer().registerScoped('broken', async () => {
+			throw failure;
+		});
+
+		const scope = disposable(createScope(container));
+		await expect(scope.resolve('broken')).rejects.toBe(failure);
+
+		expect(await scope[Symbol.asyncDispose]()).toBeUndefined();
+	});
+
+	test('生成に失敗した登録より先に作られた実体も、続けて破棄する', async () => {
+		let closed = false;
+		const failure = new Error('factory failed');
+		const container = createContainer()
+			.registerScoped('resource', () => ({
+				[Symbol.dispose]: () => {
+					closed = true;
+				},
+			}))
+			.registerScoped('broken', async () => {
+				throw failure;
+			});
+
+		const scope = disposable(createScope(container));
+		scope.resolve('resource');
+		// 逆順では拒否された生成が先頭に来る。そこで打ち切ると、残りの実体は閉じられないまま cache から消える。
+		await expect(scope.resolve('broken')).rejects.toBe(failure);
+
+		expect(await scope[Symbol.asyncDispose]()).toBeUndefined();
+		expect(closed).toBe(true);
+	});
+
+	test('生成できた実体の破棄の失敗は、逆順のまま AggregateError に集約される', async () => {
+		const order: string[] = [];
+		const firstFailure = new Error('dispose first');
+		const secondFailure = new Error('dispose second');
+		const container = createContainer()
+			.registerScoped('first', () => ({
+				[Symbol.dispose]: () => {
+					order.push('first');
+					throw firstFailure;
+				},
+			}))
+			.registerScoped('second', () => ({
+				[Symbol.asyncDispose]: async () => {
+					order.push('second');
+					throw secondFailure;
+				},
+			}));
+
+		const scope = disposable(createScope(container));
+		scope.resolve('first');
+		scope.resolve('second');
+
+		const error = await scope[Symbol.asyncDispose]().then(
+			() => undefined,
+			(e: unknown) => e,
+		);
+		expect(error).toBeInstanceOf(AggregateError);
+		expect((error as AggregateError).errors).toEqual([secondFailure, firstFailure]);
+		expect(order).toEqual(['second', 'first']);
+	});
+
+	test('生成に失敗したものは AggregateError に入らず、破棄に失敗した実体だけが残る', async () => {
+		const creation = new Error('factory failed');
+		const cleanup = new Error('dispose failed');
+		const container = createContainer()
+			.registerScoped('broken', async () => {
+				throw creation;
+			})
+			.registerScoped('resource', () => ({
+				[Symbol.dispose]: () => {
+					throw cleanup;
+				},
+			}));
+
+		const scope = disposable(createScope(container));
+		await expect(scope.resolve('broken')).rejects.toBe(creation);
+		scope.resolve('resource');
+
+		const error = await scope[Symbol.asyncDispose]().then(
+			() => undefined,
+			(e: unknown) => e,
+		);
+		expect(error).toBeInstanceOf(AggregateError);
+		expect((error as AggregateError).errors).toEqual([cleanup]);
+	});
+
+	test('生成の失敗は、その token を解決した呼び出し側が受け取る', async () => {
+		const failure = new Error('factory failed');
+		const container = createContainer().registerScoped('broken', async () => {
+			throw failure;
+		});
+
+		const scope = disposable(createScope(container));
+		const pending = scope.resolve('broken');
+
+		expect(await scope[Symbol.asyncDispose]()).toBeUndefined();
+		await expect(pending).rejects.toBe(failure);
+	});
+
+	test('生成の記帳を残さないビルドが cache へ載せた Promise も、完了を待って閉じる', async () => {
+		const closed: string[] = [];
+		const scope = createScope(createContainer());
+		// 記帳を残さない別のビルドが、同じ INTERNALS を通して cache へ載せた生成を模す。
+		const ownCache = scope[INTERNALS].ownCache;
+		ownCache.set(
+			{} as never,
+			Promise.resolve({
+				[Symbol.dispose]: () => {
+					closed.push('foreign');
+				},
+			}),
+		);
+		ownCache.set({} as never, Promise.reject(new Error('foreign creation failed')));
+
+		expect(await disposable(scope)[Symbol.asyncDispose]()).toBeUndefined();
+		expect(closed).toEqual(['foreign']);
 	});
 });
 

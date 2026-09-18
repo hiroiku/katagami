@@ -45,7 +45,7 @@ In application code, change the wiring, run `npx tsc --noEmit`, then run behavio
 
 ## Make the workflow usable
 
-Give the agent the [v3 usage guide](../ai-coding-agents.md), the application's composition root and
+Give the agent the [v4 usage guide](../ai-coding-agents.md), the application's composition root and
 its verification command. Have it use the supplied factory resolver, preserve inferred registration
 types and run the checker after changes. A [runnable request-scope starter](../../examples/request-scope/README.md)
 shows fake injection, concurrent calls and cleanup on both success and failure.

@@ -29,11 +29,11 @@ console.log(greeting);
 
 Katagami verbindet **aus Registrierungen abgeleitete Typen, Scope-Prüfungen zur Compile-Zeit und keine Laufzeitabhängigkeiten** mit gewöhnlichen TypeScript-Factories. Decorators und Metadaten sind nicht nötig. Ressourcenfreigabe und Lazy Resolution haben eigene Einstiegspunkte.
 
-**Geprüft am 2026-09-11**, anhand stabiler npm-Versionen und offizieller Quellen. Siehe [Versionen und Quellen](./choosing-di.md#comparison-sources) sowie den [vollständigen Vergleich mit Async-Verhalten und Ressourcenfreigabe](../README.md#library-comparison).
+**Geprüft am 2026-09-11**, anhand stabiler npm-Versionen und offizieller Quellen. Die Katagami-Angaben beschreiben diese Version (4.0.0). Siehe [Versionen und Quellen](./choosing-di.md#comparison-sources) sowie den [vollständigen Vergleich mit Async-Verhalten und Ressourcenfreigabe](../README.md#library-comparison).
 
 | Bibliothek / Version | Abhängigkeitstypen und Registrierungsprüfung | Scope-Verhalten |
 | --- | --- | --- |
-| **Katagami 3.0.3** | **Sammelt Literal-/unique-symbol-Tokens; fehlende erforderliche Tokens sind Typfehler** | **Scoped-Tokens im Resolver von Singleton-/Transient-Factories ausgeschlossen** |
+| **Katagami 4.0.0** | **Sammelt Literal-/unique-symbol-Tokens; fehlende erforderliche Tokens sind Typfehler** | **Scoped-Tokens im Resolver von Singleton-/Transient-Factories ausgeschlossen** |
 | InversifyJS 8.2.3 | Typisierte Bindings; Existenzprüfung zur Laufzeit | Konfigurierte Binding-Lebensdauer |
 | tsyringe 4.10.0 | Klassen-/generische Typen; Registrierungsprüfung zur Laufzeit | Lebensdauer und Kindcontainer |
 | TypeDI 0.10.0 | Klassen und `Token<T>`; Registrierungsprüfung zur Laufzeit | Geteilte/Transient-Services, benannte Container |
@@ -74,6 +74,7 @@ Unterstützt Singleton, Transient und Scoped, Modulkomposition mit use(), asynch
 - [Anleitung für KI-Agenten (Englisch)](./ai-coding-agents.md)
 - [Typgarantien (Englisch)](./type-safety.md)
 - [API und Anwendung (Englisch)](./guide.md)
+- [Registrierungsrichtlinien und Operationen (Englisch)](./registration-policies.md)
 - [Starter für Anfrage-Scopes (Englisch)](../examples/request-scope/README.md)
 - [DI auswählen (Englisch)](./choosing-di.md)
 

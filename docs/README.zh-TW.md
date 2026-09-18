@@ -29,11 +29,11 @@ console.log(greeting);
 
 Katagami 在一般 TypeScript 工廠中結合了**從註冊推導型別、編譯時作用域限制、零執行期依賴**。不需要裝飾器或中繼資料設定，資源清理與延遲解析可透過獨立入口按需匯入。
 
-**查核日期：2026-09-11。** 對照 npm 穩定版與官方資料；請參閱[版本與來源](./choosing-di.md#comparison-sources)及[包含非同步與清理功能的完整比較](../README.md#library-comparison)。
+**查核日期：2026-09-11。** 對照 npm 穩定版與官方資料；Katagami 一欄描述本次發布（4.0.0）；請參閱[版本與來源](./choosing-di.md#comparison-sources)及[包含非同步與清理功能的完整比較](../README.md#library-comparison)。
 
 | 函式庫／版本 | 依賴型別與註冊檢查 | 作用域策略 |
 | --- | --- | --- |
-| **Katagami 3.0.3** | **累積字面值、unique symbol 的註冊型別，拒絕未註冊的必要 token** | **從 Singleton、Transient 工廠的 resolver 型別中排除 Scoped token** |
+| **Katagami 4.0.0** | **累積字面值、unique symbol 的註冊型別，拒絕未註冊的必要 token** | **從 Singleton、Transient 工廠的 resolver 型別中排除 Scoped token** |
 | InversifyJS 8.2.3 | 具型別的 binding；執行時檢查是否已綁定 | binding 的生命週期設定 |
 | tsyringe 4.10.0 | 類別與泛型型別；執行時檢查註冊 | 生命週期設定與子容器 |
 | TypeDI 0.10.0 | 類別與 `Token<T>`；執行時檢查註冊 | 共用、Transient 服務與具名容器 |
@@ -74,6 +74,7 @@ createContainer()
 - [AI 程式設計指南（英文）](./ai-coding-agents.md)
 - [型別保證範圍（英文）](./type-safety.md)
 - [API 與使用指南（英文）](./guide.md)
+- [註冊策略與公開操作（英文）](./registration-policies.md)
 - [請求範圍入門範例（英文）](../examples/request-scope/README.md)
 - [DI 選型指南（英文）](./choosing-di.md)
 

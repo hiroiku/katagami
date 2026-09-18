@@ -41,7 +41,8 @@ stays shared, and resources are cleaned on rejection as well as success. The
 
 The compile-time example uses accumulated literal keys. A broad type annotation, predeclared map,
 compatible class token, assertion or captured external resolver can change what is checked.
-The runtime captive-dependency guard also has limits around work resumed after an `await`.
+The runtime captive-dependency guard follows the factory's resolver, including after an `await`, but not
+a scope captured from elsewhere.
 The [type-safety guide](../type-safety.md) explains the exact scope of the guarantee.
 
 Katagami provides Singleton, Transient and Scoped lifetimes without decorator metadata.

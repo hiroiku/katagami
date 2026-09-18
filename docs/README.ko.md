@@ -29,11 +29,11 @@ console.log(greeting);
 
 **등록에서 추론한 타입, 컴파일 시점의 스코프 제한, 런타임 의존성 없음**을 일반 TypeScript 팩터리에서 함께 사용할 수 있습니다. 데코레이터나 메타데이터 설정이 필요 없으며, 리소스 정리와 지연 해석은 별도 진입점으로 가져옵니다.
 
-**2026-09-11 확인.** npm의 안정 버전과 공식 자료를 비교했습니다. [버전과 출처](./choosing-di.md#comparison-sources), [비동기·정리 기능까지 포함한 전체 비교](../README.md#library-comparison)를 참고하세요.
+**2026-09-11 확인.** npm의 안정 버전과 공식 자료를 비교했습니다. Katagami 항목은 이번 릴리스(4.0.0) 기준입니다. [버전과 출처](./choosing-di.md#comparison-sources), [비동기·정리 기능까지 포함한 전체 비교](../README.md#library-comparison)를 참고하세요.
 
 | 라이브러리 / 버전 | 의존성 타입과 등록 확인 | 스코프 정책 |
 | --- | --- | --- |
-| **Katagami 3.0.3** | **리터럴·unique symbol 등록을 누적하고 미등록 필수 토큰 거부** | **Singleton·Transient 팩터리에서 Scoped 토큰을 타입으로 제외** |
+| **Katagami 4.0.0** | **리터럴·unique symbol 등록을 누적하고 미등록 필수 토큰 거부** | **Singleton·Transient 팩터리에서 Scoped 토큰을 타입으로 제외** |
 | InversifyJS 8.2.3 | 타입이 있는 binding, 등록 여부는 런타임 확인 | binding의 라이프타임 설정 |
 | tsyringe 4.10.0 | 클래스·제네릭 타입, 등록 여부는 런타임 확인 | 라이프타임 설정과 자식 컨테이너 |
 | TypeDI 0.10.0 | 클래스·`Token<T>`, 등록 여부는 런타임 확인 | 공유·Transient 서비스와 이름 있는 컨테이너 |
@@ -74,6 +74,7 @@ Singleton, Transient, Scoped 수명, use() 모듈 합성, 비동기 팩터리, �
 - [AI 코딩 가이드 (영어)](./ai-coding-agents.md)
 - [타입 보장 범위 (영어)](./type-safety.md)
 - [API와 사용 가이드 (영어)](./guide.md)
+- [등록 정책과 공개 작업 (영어)](./registration-policies.md)
 - [요청 스코프 스타터 (영어)](../examples/request-scope/README.md)
 - [DI 선택 가이드 (영어)](./choosing-di.md)
 

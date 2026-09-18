@@ -593,3 +593,27 @@ createContainer()
 	// OK — resolveAll is available on disposable scope
 	const _all: ScopedService[] = scope.resolveAll(ScopedService);
 }
+
+{
+	const handle = {
+		status: () => 'ready' as const,
+		// biome-ignore lint/suspicious/noThenProperty: 独自メソッドを持つ thenable の推論型を検証する。
+		then(resolve: (value: number) => void) {
+			resolve(1);
+		},
+	};
+	const c = createContainer()
+		.registerSingleton('singletonHandle', () => handle)
+		.registerScoped('scopedHandle', () => handle)
+		.registerTransient('transientHandle', () => handle);
+	const scope = createScope(c);
+	const _singleton: typeof handle = scope.resolve('singletonHandle');
+	const _scoped: typeof handle = scope.resolve('scopedHandle');
+	const _transient: typeof handle = scope.resolve('transientHandle');
+	const _status: 'ready' = scope.resolve('scopedHandle').status();
+	// @ts-expect-error 通常の thenable を native Promise の型へ正規化しない。
+	const _promise: Promise<number> = scope.resolve('singletonHandle');
+	const policyScope = createScope(createContainer({ policy: {} }).registerScoped('handle', () => handle));
+	const _policyHandle: typeof handle = policyScope.resolve('handle');
+	const _policyStatus: 'ready' = policyScope.resolve('handle').status();
+}

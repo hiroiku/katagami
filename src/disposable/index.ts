@@ -1,5 +1,13 @@
 import type { Container } from '../container/index.js';
-import { type ContainerInternals, INTERNALS, type TYPE_STATE } from '../internal.js';
+import {
+	type ContainerInternals,
+	creations,
+	INTERNALS,
+	type REGISTRATION_STATE,
+	settle,
+	type TYPE_STATE,
+} from '../internal.js';
+import type { AnyMetadataKey } from '../metadata/index.js';
 import type { AbstractConstructor, Resolver } from '../resolver/index.js';
 import type { Scope } from '../scope/index.js';
 
@@ -24,8 +32,12 @@ export interface DisposableContainer<
 	ScopedT = Record<never, never>,
 	ScopedSync extends AbstractConstructor = never,
 	ScopedAsync extends AbstractConstructor = never,
+	Required extends readonly AnyMetadataKey[] = readonly [],
+	Registrations = unknown,
 > extends AsyncDisposable {
-	readonly [INTERNALS]: ContainerInternals;
+	readonly [INTERNALS]: ContainerInternals & { readonly kind: 'container' };
+	readonly [REGISTRATION_STATE]: Registrations;
+	readonly requiredMetadataType?: Required;
 	readonly [TYPE_STATE]?: {
 		readonly kind: 'container';
 		readonly registrations: readonly [T, Sync, Async, ScopedT, ScopedSync, ScopedAsync];
@@ -51,9 +63,11 @@ export interface DisposableScope<
 	ScopedT = Record<never, never>,
 	ScopedSync extends AbstractConstructor = never,
 	ScopedAsync extends AbstractConstructor = never,
+	Registrations = unknown,
 > extends Resolver<T & ScopedT, Sync | ScopedSync, Async | ScopedAsync>,
 		AsyncDisposable {
-	readonly [INTERNALS]: ContainerInternals;
+	readonly [INTERNALS]: ContainerInternals & { readonly kind: 'scope' };
+	readonly [REGISTRATION_STATE]: Registrations;
 	readonly [TYPE_STATE]?: {
 		readonly kind: 'scope';
 		readonly registrations: readonly [T, Sync, Async, ScopedT, ScopedSync, ScopedAsync];
@@ -66,6 +80,8 @@ export interface DisposableScope<
  * Enables `await using` syntax by attaching `[Symbol.asyncDispose]` to the target.
  * Disposes owned instances in reverse creation order (LIFO), calling
  * `[Symbol.asyncDispose]()` or `[Symbol.dispose]()` on each instance that implements them.
+ * A cached asynchronous creation that rejected yields no resolved value to close: it is awaited,
+ * skipped, and its failure is left to the caller that resolved the token.
  *
  * The returned type prevents registration methods from being called on a potentially-disposed container.
  * For scopes, `resolve`, `tryResolve`, `resolveAll`, and `tryResolveAll` remain available.
@@ -90,9 +106,11 @@ export function disposable<
 	ScopedT,
 	ScopedSync extends AbstractConstructor,
 	ScopedAsync extends AbstractConstructor,
+	Required extends readonly AnyMetadataKey[],
+	Registrations,
 >(
-	container: Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>,
-): DisposableContainer<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
+	container: Container<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Required, Registrations>,
+): DisposableContainer<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Required, Registrations>;
 export function disposable<
 	T,
 	Sync extends AbstractConstructor,
@@ -100,9 +118,10 @@ export function disposable<
 	ScopedT,
 	ScopedSync extends AbstractConstructor,
 	ScopedAsync extends AbstractConstructor,
+	Registrations,
 >(
-	scope: Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>,
-): DisposableScope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync>;
+	scope: Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Registrations>,
+): DisposableScope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Registrations>;
 export function disposable<C extends { readonly [INTERNALS]: ContainerInternals }>(container: C): C & AsyncDisposable {
 	const asyncDispose = async (): Promise<void> => {
 		const internals = container[INTERNALS];
@@ -117,13 +136,22 @@ export function disposable<C extends { readonly [INTERNALS]: ContainerInternals 
 		const errors: unknown[] = [];
 
 		for (const instance of instances) {
-			try {
-				let resolved: unknown = instance;
+			let resolved: unknown = instance;
 
-				if (instance instanceof Promise) {
-					resolved = await instance;
+			if (instance instanceof Promise) {
+				// 閉じる対象を取り出すために、scope が残した生成の記帳を待つ。呼出元へ渡した Promise では
+				// ないので、破棄が呼出元の失敗を先に受け取ってしまうことはない。記帳を残さない別のビルドが
+				// cache へ載せた Promise は、閉じ損ねないようにその Promise 自体を待つ。
+				// 失敗した生成からは閉じる対象を得られないので、破棄の失敗としては数えず、
+				// 残りの実体の破棄を続ける。生成の失敗は、その token を解決した呼出元が受け取る。
+				const creation = await (creations.get(instance) ?? settle(instance));
+				if (creation.failed) {
+					continue;
 				}
+				resolved = creation.value;
+			}
 
+			try {
 				if (resolved != null && typeof resolved === 'object') {
 					if (Symbol.asyncDispose in resolved) {
 						await (resolved as AsyncDisposable)[Symbol.asyncDispose]();
