@@ -113,9 +113,19 @@ Use a predeclared map when order independence is useful and verify the compositi
 ## Runtime checks and limits
 
 Runtime checks report missing registrations, disposed scopes and circular resolution paths.
-factory に渡す resolver は呼出元と singleton の寿命制約を保持し、`await` 後の scoped 解決も検査します。別の scope を closure で捕捉した依存までは保証しません。型付き factory API と runtime テストを併用してください。
+The captive-dependency guard detects scoped resolution from a singleton factory, including indirect calls.
+The resolver passed to a factory keeps its requester and the singleton restriction, so resolutions made
+after an `await`, or later through a stored resolver, are checked too. A factory that calls the scope
+building it directly, instead of its resolver, is checked only while it runs synchronously; after an
+`await`, such a call counts as a call from outside. Dependencies captured from another scope through a
+closure are not covered. While an async creation is pending, the factories building it cannot resolve the
+same token again, even without waiting for it. A creation that waits for its own Promise through a
+dependency that has already finished building is not detected and never settles. Synchronous cycles are
+reported whichever resolver or scope they pass through. Use the typed factory API and runtime tests
+together.
 
-必須属性と公開操作の追加保証・型消去時の制限は[登録の属性と公開操作](./registration-policies.ja.md)を参照してください。
+See [registration policies and operations](./registration-policies.md) for the additional guarantees of
+required metadata and public operations, and for their limits when types are erased.
 
 ## Verification
 

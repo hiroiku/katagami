@@ -3,7 +3,11 @@ import { ContainerError } from '../error/index.js';
 const KEY = Symbol.for('katagami.metadata-key.v1');
 const ENTRY = Symbol.for('katagami.metadata-entry.v1');
 
-/** 名前は型検査、キーオブジェクトの同一性は実行時の照合に使う。 */
+/**
+ * A typed metadata key. Call it with a value to create a metadata entry for a registration.
+ *
+ * The name is used by type checking; runtime lookups use the key object's identity.
+ */
 export interface MetadataKey<T, Name extends PropertyKey = PropertyKey> {
 	(value: T): MetadataEntry<T, Name>;
 	readonly name: Name;
@@ -27,7 +31,18 @@ export interface AnyMetadataEntry {
 }
 export type MetadataKeyOf<E> = E extends MetadataEntry<infer T, infer N> ? MetadataKey<T, N> : never;
 
-/** 型引数と名前の推論を分け、別名のキーを取り違えない。 */
+/**
+ * Define a typed metadata key.
+ *
+ * The value type is given first and the name is inferred in a second call, so keys with different
+ * names are never confused.
+ *
+ * @example
+ * ```ts
+ * const AREA = createMetadataKey<'internal' | 'public'>()('area');
+ * container.registerScoped('read', factory, { metadata: [AREA('public')] });
+ * ```
+ */
 export function createMetadataKey<T>(): <const Name extends PropertyKey>(name: Name) => MetadataKey<T, Name> {
 	return name => {
 		const key = (value: T): MetadataEntry<T, typeof name> =>
@@ -43,11 +58,20 @@ export interface MetadataReader {
 	has(key: AnyMetadataKey): boolean;
 }
 
-/** 登録時に値を複写し、配列や entry の変更が解決方針へ波及しないようにする。 */
+/** Registration metadata as a key/value pair, so origins can be compared by content. */
+export type MetadataPair = readonly [key: AnyMetadataKey, value: unknown];
+
+/** A reader and the key/value pairs for the same registration metadata, built from one copy. */
+export interface RegisteredMetadata {
+	readonly reader: MetadataReader;
+	readonly pairs: readonly MetadataPair[];
+}
+
+/** Copy the metadata at registration, so later changes to the array or entries do not affect checks. */
 export function readMetadata(
 	entries: readonly AnyMetadataEntry[],
 	required: readonly AnyMetadataKey[],
-): MetadataReader {
+): RegisteredMetadata {
 	const values = new Map<AnyMetadataKey, unknown>();
 	const names = new Set<PropertyKey>();
 	for (const entry of entries) {
@@ -66,14 +90,17 @@ export function readMetadata(
 		}
 	}
 	return Object.freeze({
-		get: <T>(key: MetadataKey<T>): T | undefined => values.get(key) as T | undefined,
-		has: (key: AnyMetadataKey) => values.has(key),
-		require: <T>(key: MetadataKey<T>): T => {
-			if (!values.has(key)) {
-				throw new ContainerError('Required metadata is missing.');
-			}
-			return values.get(key) as T;
-		},
+		pairs: Object.freeze([...values].map(pair => Object.freeze(pair) as MetadataPair)),
+		reader: Object.freeze({
+			get: <T>(key: MetadataKey<T>): T | undefined => values.get(key) as T | undefined,
+			has: (key: AnyMetadataKey) => values.has(key),
+			require: <T>(key: MetadataKey<T>): T => {
+				if (!values.has(key)) {
+					throw new ContainerError('Required metadata is missing.');
+				}
+				return values.get(key) as T;
+			},
+		}),
 	});
 }
 

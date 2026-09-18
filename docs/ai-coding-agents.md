@@ -1,7 +1,7 @@
 # TypeScript dependency injection with AI coding agents
 
 Use Katagami's accumulated registration types as feedback while an agent edits dependency wiring.
-This guide describes the v3 API. Check the installed package version before editing an existing app.
+This guide describes the v4 API. Check the installed package version before editing an existing app.
 
 ## A repeatable workflow
 
@@ -42,7 +42,7 @@ concurrent calls and replacement of infrastructure with a fake.
 | `No overload matches this call` at `resolve`, often mentioning `never` | Is this exact token registered and visible here? | Register it earlier, correct its spelling, or compose the module first |
 | The same error inside a singleton/transient factory after a scoped registration | Does the factory capture request state? | Make the consumer scoped, or pass request data into a method without storing it |
 | A service method does not exist on `Promise<...>` | Is the dependency factory async? | Await the resolution; make the consuming factory async if needed |
-| `resolve` does not exist on `Container` | v3 separates registration from resolution | Call `createScope(container).resolve(token)` |
+| `resolve` does not exist on `Container` | Katagami separates registration from resolution | Call `createScope(container).resolve(token)` |
 | `lazy` rejects a token | Is it an async or PropertyKey token? | Use direct resolution; `lazy` accepts synchronous class tokens |
 | Runtime `Token ... is not registered` despite a passing type check | Predeclared map, compatible class, widened key or assertion? | Register the actual token and review the type-safety guide |
 
@@ -52,7 +52,7 @@ expression and the resolver's visible registrations; do not match an error strin
 ## Project instruction you can copy
 
 ```text
-Use the installed Katagami v3 API for dependency wiring. Read
+Use the installed Katagami v4 API for dependency wiring. Read
 node_modules/katagami/docs/ai-coding-agents.md and
 node_modules/katagami/docs/type-safety.md first.
 Preserve inferred registration chains and narrow literal/unique-symbol tokens.

@@ -5,7 +5,7 @@ import { build } from 'esbuild';
 const format = process.argv[2];
 if (!['esm', 'cjs'].includes(format)) throw new Error('Expected esm or cjs');
 await build({
-	entryPoints: ['src/index.ts', 'src/disposable/index.ts', 'src/lazy/index.ts', 'src/invocation/index.ts'],
+	entryPoints: ['src/index.ts', 'src/disposable/index.ts', 'src/lazy/index.ts'],
 	bundle: true,
 	format,
 	splitting: format === 'esm',

@@ -29,11 +29,11 @@ console.log(greeting);
 
 Katagami combina **tipos derivados del registro, restricciones de ámbito en compilación y cero dependencias de ejecución** en factorías de TypeScript normales. No requiere decoradores ni metadatos. La liberación de recursos y la resolución diferida tienen puntos de entrada separados.
 
-**Revisado el 2026-09-11**, con versiones estables de npm y fuentes oficiales. Consulta las [versiones y fuentes](./choosing-di.md#comparison-sources) y la [comparación completa de asincronía y liberación de recursos](../README.md#library-comparison).
+**Revisado el 2026-09-11**, con versiones estables de npm y fuentes oficiales. Los datos de Katagami describen esta versión (4.0.0). Consulta las [versiones y fuentes](./choosing-di.md#comparison-sources) y la [comparación completa de asincronía y liberación de recursos](../README.md#library-comparison).
 
 | Biblioteca / versión | Tipos y comprobación de registros | Política de ámbitos |
 | --- | --- | --- |
-| **Katagami 3.0.3** | **Acumula tokens literales/unique symbol; rechaza tokens requeridos sin registrar** | **Excluye tokens Scoped del resolver de factorías Singleton/Transient** |
+| **Katagami 4.0.0** | **Acumula tokens literales/unique symbol; rechaza tokens requeridos sin registrar** | **Excluye tokens Scoped del resolver de factorías Singleton/Transient** |
 | InversifyJS 8.2.3 | Bindings tipados; existencia comprobada en ejecución | Ciclo de vida configurado por binding |
 | tsyringe 4.10.0 | Tipos de clase/genéricos; registros comprobados en ejecución | Ciclos de vida y contenedores hijos |
 | TypeDI 0.10.0 | Clases y `Token<T>`; registros comprobados en ejecución | Servicios compartidos/Transient y contenedores con nombre |
@@ -74,6 +74,7 @@ Incluye ciclos de vida Singleton, Transient y Scoped, composición con use(), f�
 - [Guía para agentes de IA (inglés)](./ai-coding-agents.md)
 - [Garantías de tipos (inglés)](./type-safety.md)
 - [Guía de uso y API (inglés)](./guide.md)
+- [Políticas de registro y operaciones (inglés)](./registration-policies.md)
 - [Ejemplo de ámbitos por petición (inglés)](../examples/request-scope/README.md)
 - [Cómo elegir DI (inglés)](./choosing-di.md)
 

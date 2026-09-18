@@ -1,6 +1,6 @@
 {
 	"name": "katagami",
-	"version": "3.0.3",
+	"version": "4.0.0",
 	"description": "Type-safe dependency injection for TypeScript, with inferred types and scope checks for AI-assisted development. No decorators or reflect-metadata.",
 	"license": "MIT",
 	"type": "module",
@@ -34,16 +34,6 @@
 			"require": {
 				"types": "./dist/lazy/index.d.cts",
 				"default": "./dist/lazy/index.cjs"
-			}
-		},
-		"./invocation": {
-			"import": {
-				"types": "./dist/invocation/index.d.ts",
-				"default": "./dist/invocation/index.js"
-			},
-			"require": {
-				"types": "./dist/invocation/index.d.cts",
-				"default": "./dist/invocation/index.cjs"
 			}
 		}
 	},

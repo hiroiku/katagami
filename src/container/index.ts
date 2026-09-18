@@ -8,9 +8,9 @@ import {
 	type MetadataReader,
 	type RegistrationArguments,
 	readMetadata,
-	validateMetadataKeys,
 } from '../metadata/index.js';
 import type { AbstractConstructor, Lifetime, Registration, Resolver } from '../resolver/index.js';
+import { bindPolicy, type ContainerPolicy, type PolicyState, type RequiredMetadata } from './policy.js';
 
 export type RegisteredTokens<C> = C extends { readonly [REGISTRATION_STATE]: infer S }
 	? S extends { readonly untracked: true }
@@ -67,25 +67,55 @@ type Append<S, K, E extends readonly AnyMetadataEntry[], F = never> = unknown ex
 				readonly callable: F;
 			}
 		>;
-type PolicyState<S> = S extends { readonly metadata: infer M; readonly callable: infer F }
+type TrackedState<S> = S extends { readonly metadata: infer M; readonly callable: infer F }
 	? [M | F] extends [never]
 		? never
 		: S
 	: never;
 type Merge<S, K, N> = unknown extends S
-	? [PolicyState<N>] extends [never]
+	? [TrackedState<N>] extends [never]
 		? unknown
 		: Replace<S, K, N>
 	: Replace<S, K, N>;
 type MissingMetadata<R, S> = unknown extends S ? R : S extends { readonly metadata: infer M } ? Exclude<R, M> : never;
 
-/** 必須属性を指定しない既存の生成形式も維持する。 */
-export function createContainer<const Required extends readonly AnyMetadataKey[]>(options: {
-	readonly requiredMetadata: Required;
-}): Container<Record<never, never>, never, never, Record<never, never>, never, never, Required, never>;
-export function createContainer<T, ScopedT, const Required extends readonly AnyMetadataKey[]>(options: {
-	readonly requiredMetadata: Required;
-}): Container<T, never, never, ScopedT, never, never, Required, never>;
+/**
+ * Create a new DI container that follows a shared policy.
+ *
+ * Containers created with the same policy object share its settings and the origins it observes.
+ * Every registration must carry the policy's `requiredMetadata`, and `use()` accepts only modules
+ * with the same policy or without one. Declare the policy with `satisfies ContainerPolicy` to keep
+ * its concrete types.
+ *
+ * @param options `policy`: the shared policy object
+ */
+export function createContainer<const P extends ContainerPolicy>(options: {
+	readonly policy: P;
+}): Container<Record<never, never>, never, never, Record<never, never>, never, never, RequiredMetadata<P>, never>;
+/**
+ * Create a new DI container that follows a shared policy, with predeclared token type maps.
+ *
+ * @template T PropertyKey-based token type map (defined via interface, order-independent)
+ * @template ScopedT PropertyKey-based token type map for scoped registrations
+ * @param options `policy`: the shared policy object
+ */
+export function createContainer<T, ScopedT, const P extends ContainerPolicy>(options: {
+	readonly policy: P;
+}): Container<T, never, never, ScopedT, never, never, RequiredMetadata<P>, never>;
+/**
+ * Create a new DI container.
+ *
+ * Pass an interface as generic T to fix the PropertyKey token type map upfront (order-independent).
+ * Class tokens are accumulated via registerSingleton/registerTransient method chaining (order-dependent).
+ *
+ * @example
+ * ```ts
+ * interface Services { SampleController: string }
+ * const c = createContainer<Services>()
+ *   .registerSingleton(TextGenerationService, () => new MastraTextGenerationService())
+ *   .registerTransient(GenerateTextUseCase, r => new GenerateTextUseCase(r.resolve(TextGenerationService)));
+ * ```
+ */
 export function createContainer<T = Record<never, never>, ScopedT = Record<never, never>>(): Container<
 	T,
 	never,
@@ -97,12 +127,28 @@ export function createContainer<T = Record<never, never>, ScopedT = Record<never
 	[keyof T | keyof ScopedT] extends [never] ? never : unknown
 >;
 export function createContainer(options?: {
-	readonly requiredMetadata: readonly AnyMetadataKey[];
+	readonly policy: ContainerPolicy;
 }): Container<unknown, never, never, unknown, never, never, readonly AnyMetadataKey[]> {
 	return new Container(options);
 }
 
-/** 通常の factory と lifetime を登録し、属性と公開操作の型をチェーンで保持する。 */
+/**
+ * Lightweight DI container — registration only.
+ *
+ * Provides type inference through method chaining with registerSingleton/registerTransient/registerScoped.
+ * Resolution is performed through a Scope created via `createScope(container)`.
+ *
+ * Registering the same token multiple times accumulates all factories.
+ *
+ * @template T PropertyKey-based token type map (defined via interface, order-independent)
+ * @template Sync Union of registered sync class constructors (accumulated via chaining, order-dependent)
+ * @template Async Union of registered async class constructors (accumulated via chaining, order-dependent)
+ * @template ScopedT PropertyKey-based token type map for scoped registrations
+ * @template ScopedSync Union of scoped sync class constructors (accumulated via chaining, order-dependent)
+ * @template ScopedAsync Union of scoped async class constructors (accumulated via chaining, order-dependent)
+ * @template Required Metadata keys the container's policy requires on every registration
+ * @template Registrations Registration state that tracks metadata and operations per token
+ */
 export class Container<
 	T = Record<never, never>,
 	Sync extends AbstractConstructor = never,
@@ -116,12 +162,16 @@ export class Container<
 	private readonly registrations = new Map<unknown, Registration[]>();
 	private readonly singletonCache = new Map<Registration, unknown>();
 	private readonly requiredMetadata: readonly AnyMetadataKey[];
+	private readonly policy: PolicyState | undefined;
 	private disposed = false;
 	public declare readonly [REGISTRATION_STATE]: Registrations;
 	public readonly [INTERNALS]: ContainerInternals & { readonly kind: 'container' };
-	public constructor(options?: { readonly requiredMetadata: Required }) {
-		this.requiredMetadata = [...(options?.requiredMetadata ?? [])];
-		validateMetadataKeys(this.requiredMetadata);
+	public constructor(options?: { readonly policy: ContainerPolicy<Required> }) {
+		if (options && 'requiredMetadata' in options) {
+			throw new ContainerError('requiredMetadata must be declared in policy.');
+		}
+		this.policy = bindPolicy(options?.policy);
+		this.requiredMetadata = this.policy?.requiredMetadata ?? [];
 		this[INTERNALS] = {
 			beforeResolve: [],
 			isDisposed: () => this.disposed,
@@ -130,11 +180,26 @@ export class Container<
 				this.disposed = true;
 			},
 			ownCache: this.singletonCache,
+			policy: this.policy,
 			registrations: this.registrations,
 			singletonCache: this.singletonCache,
 		};
 	}
-	/** 同じ container で共有する依存を登録する。要求に依存する処理は scoped にする。 */
+	/**
+	 * Register a factory function as a singleton for the given token.
+	 *
+	 * Creates the instance on the first resolve and returns the cached value thereafter.
+	 * If the same token is registered multiple times, all factories are accumulated.
+	 * `resolve()` returns the last registered instance; `resolveAll()` returns all.
+	 * Register request-dependent work as scoped instead.
+	 *
+	 * @param token Any value to use as a token
+	 * @param factory Factory function that receives a resolver and returns an instance. Wrap it with
+	 *   `entrypoint()` to expose the function it returns as an operation.
+	 * @param options `metadata`: entries created with metadata keys. Required when the policy declares
+	 *   `requiredMetadata`.
+	 * @returns The container for method chaining
+	 */
 	public registerSingleton<
 		K extends PropertyKey,
 		F extends Callable,
@@ -216,7 +281,20 @@ export class Container<
 	): unknown {
 		return this.addRegistration(token, factory as Registration['factory'], 'singleton', options[0]?.metadata ?? []);
 	}
-	/** 解決のたびに生成する依存を登録する。 */
+	/**
+	 * Register a factory function as transient for the given token.
+	 *
+	 * Creates a new instance via the factory function on every resolve.
+	 * If the same token is registered multiple times, all factories are accumulated.
+	 * `resolve()` returns the last registered instance; `resolveAll()` returns all.
+	 *
+	 * @param token Any value to use as a token
+	 * @param factory Factory function that receives a resolver and returns an instance. Wrap it with
+	 *   `entrypoint()` to expose the function it returns as an operation.
+	 * @param options `metadata`: entries created with metadata keys. Required when the policy declares
+	 *   `requiredMetadata`.
+	 * @returns The container for method chaining
+	 */
 	public registerTransient<
 		K extends PropertyKey,
 		F extends Callable,
@@ -298,7 +376,20 @@ export class Container<
 	): unknown {
 		return this.addRegistration(token, factory as Registration['factory'], 'transient', options[0]?.metadata ?? []);
 	}
-	/** 同じ scope 内で共有する依存を登録する。 */
+	/**
+	 * Register a factory function as scoped for the given token.
+	 *
+	 * Within a scope, creates the instance on the first resolve and returns the cached value thereafter.
+	 * Each scope maintains its own cache, so different scopes produce different instances.
+	 * Scoped tokens cannot be resolved from the root container — use createScope() first.
+	 *
+	 * @param token Any value to use as a token
+	 * @param factory Factory function that receives a resolver and returns an instance. Wrap it with
+	 *   `entrypoint()` to expose the function it returns as an operation.
+	 * @param options `metadata`: entries created with metadata keys. Required when the policy declares
+	 *   `requiredMetadata`.
+	 * @returns The container for method chaining
+	 */
 	public registerScoped<
 		K extends PropertyKey,
 		F extends Callable,
@@ -382,7 +473,13 @@ export class Container<
 		return this.addRegistration(token, factory as Registration['factory'], 'scoped', options[0]?.metadata ?? []);
 	}
 
-	/** 登録済みの最後の属性だけを読み、factory は実行しない。 */
+	/**
+	 * Read the metadata of the last registration for a token without creating the instance.
+	 *
+	 * @param token A registered token
+	 * @returns A read-only metadata reader
+	 * @throws ContainerError if the token is not registered
+	 */
 	public getMetadata<V>(token: AbstractConstructor<V> & (Sync | Async | ScopedSync | ScopedAsync)): MetadataReader;
 	public getMetadata<K extends keyof (T & ScopedT)>(token: K): MetadataReader;
 	public getMetadata(token: unknown): MetadataReader {
@@ -393,7 +490,17 @@ export class Container<
 		return (entries[entries.length - 1] as Registration).metadata;
 	}
 
-	/** 属性を全件検証してから、トークンごとに登録と公開性を置き換える。 */
+	/**
+	 * Apply all registrations from another container (module) to this container.
+	 *
+	 * Copies registration entries by replacing existing entries for each token.
+	 * Singleton instance caches are not shared — each container manages its own.
+	 * A module with a policy must use this container's policy, and every copied registration must carry
+	 * the metadata this container's policy requires; otherwise nothing is copied.
+	 *
+	 * @param source A container whose registrations will be copied into this container
+	 * @returns The container for method chaining
+	 */
 	public use<
 		MT,
 		MS extends AbstractConstructor,
@@ -426,6 +533,10 @@ export class Container<
 		if (this.disposed) {
 			throw new ContainerError('Cannot register on a disposed container.');
 		}
+		const sourcePolicy = source[INTERNALS].policy;
+		if (sourcePolicy && sourcePolicy !== this.policy) {
+			throw new ContainerError('Cannot compose containers with different policies.');
+		}
 		for (const registrations of source[INTERNALS].registrations.values()) {
 			for (const registration of registrations) {
 				for (const key of this.requiredMetadata) {
@@ -454,7 +565,8 @@ export class Container<
 			entrypoint: isEntrypoint(factory),
 			factory,
 			lifetime,
-			metadata,
+			metadata: metadata.reader,
+			metadataPairs: metadata.pairs,
 		});
 		const existing = this.registrations.get(token);
 		if (existing) {

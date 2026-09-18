@@ -177,3 +177,129 @@ test('未完了の async factory が同じ transient を生成すれば循環と
 	});
 	await expect(createScope(c).resolve('cycle')).rejects.toThrow('Circular dependency detected: cycle -> cycle');
 });
+
+test.each([
+	'scoped',
+	'singleton',
+] as const)('未完了の async な %s が cache 済みの自分を待てば、止まらず循環として拒否し、破棄も完了する', async lifetime => {
+	const container = createContainer<{ cycle: Promise<number> }>();
+	const factory = async (r: { resolve(token: 'cycle'): Promise<number> }) => {
+		await Promise.resolve();
+		return r.resolve('cycle');
+	};
+	const register = {
+		scoped: () => container.registerScoped('cycle', factory),
+		singleton: () => container.registerSingleton('cycle', factory),
+	};
+	const c = register[lifetime]();
+	const scope = disposable(createScope(c));
+	await expect(scope.resolve('cycle')).rejects.toThrow('Circular dependency detected: cycle -> cycle');
+	await scope[Symbol.asyncDispose]();
+	await disposable(c)[Symbol.asyncDispose]();
+});
+
+test('factory が捕捉した同じ scope から同期に解決しても、captive と循環を検出する', () => {
+	const c = createContainer()
+		.registerScoped('request', () => ({}))
+		.registerSingleton('shared', () => scope.resolve('request'))
+		.registerScoped('a', (): unknown => scope.resolve('b'))
+		.registerScoped('b', (r): unknown => (r as unknown as { resolve(token: string): unknown }).resolve('a'));
+	const scope = createScope(c) as unknown as { resolve(token: string): unknown };
+	expect(() => scope.resolve('shared')).toThrow('Captive dependency detected: scoped token "request"');
+	expect(() => scope.resolve('a')).toThrow('Circular dependency detected: a -> b -> a');
+});
+
+test.each([
+	'scoped',
+	'singleton',
+] as const)('生成を終えた依存が保持した resolver は、未完了の %s を別の呼び出し元のために待たずに返す', async lifetime => {
+	const { promise: gate, resolve: release } = Promise.withResolvers<void>();
+	type Back = { getA(): Promise<object> };
+	const container = createContainer<{ A: Promise<object>; B: Back }>();
+	const a = async (r: { resolve(token: 'B'): Back }) => {
+		await Promise.resolve();
+		const b = r.resolve('B');
+		await gate;
+		return { b };
+	};
+	const b = (r: { resolve(token: 'A'): Promise<object> }): Back => ({ getA: () => r.resolve('A') });
+	const register = {
+		scoped: () => container.registerScoped('A', a).registerScoped('B', b),
+		singleton: () => container.registerSingleton('A', a).registerSingleton('B', b),
+	};
+	const c = register[lifetime]();
+	const first = createScope(c);
+	const pending = first.resolve('A');
+	await Promise.resolve();
+	await Promise.resolve();
+	// 別の呼び出し元（singleton なら兄弟の scope）が、A の保留中に B の逆参照を使う。
+	const callers = { scoped: first, singleton: createScope(c) };
+	const caller = callers[lifetime];
+	const viaB = caller.resolve('B').getA();
+	release();
+	expect(await viaB).toBe(await pending);
+});
+
+test('別の scope を経由して戻った解決は、外側の factory を要求元にしない', () => {
+	const events: string[] = [];
+	const hook = (e: ResolutionEvent) => {
+		events.push(`${String(e.token)}<-${String(e.requester?.token ?? 'outside')}:${e.path.map(String).join('>')}`);
+	};
+	const other = createScope(
+		createContainer().registerScoped('x', (): unknown => first.resolve('y')),
+		{ beforeResolve: hook },
+	);
+	const first = createScope(
+		createContainer()
+			.registerScoped('a', (): unknown => other.resolve('x'))
+			.registerScoped('y', () => 'y'),
+		{ beforeResolve: hook },
+	) as unknown as { resolve(token: string): unknown };
+	expect(first.resolve('a')).toBe('y');
+	expect(events).toEqual(['a<-outside:a', 'x<-outside:x', 'y<-outside:y']);
+});
+
+test.each([
+	'scoped',
+	'transient',
+] as const)('同期に実行中の %s を、生成を終えた依存の resolver から解決し直せば循環として拒否する', lifetime => {
+	type Back = { getA(): unknown };
+	const container = createContainer<{ A: unknown; B: Back }>();
+	const a = (r: { resolve(token: 'B'): Back }) => r.resolve('B').getA();
+	const b = (r: { resolve(token: 'A'): unknown }): Back => ({ getA: () => r.resolve('A') });
+	const register = {
+		scoped: () => container.registerScoped('A', a).registerScoped('B', b),
+		transient: () => container.registerTransient('A', a).registerTransient('B', b),
+	};
+	expect(() => createScope(register[lifetime]()).resolve('A')).toThrow('Circular dependency detected: A -> A');
+});
+
+test('別の scope を経由して同期に戻った解決でも、実行中の生成への循環を拒否する', () => {
+	const other = createScope(createContainer().registerScoped('x', (): unknown => first.resolve('y')));
+	const first = createScope(
+		createContainer()
+			.registerScoped('a', (): unknown => other.resolve('x'))
+			.registerScoped('y', (r): unknown => (r as unknown as { resolve(token: string): unknown }).resolve('a')),
+	) as unknown as { resolve(token: string): unknown };
+	expect(() => first.resolve('a')).toThrow('Circular dependency detected: a -> y -> a');
+});
+
+test('同期に実行中の singleton を別の scope から解決し直せば循環として拒否する', () => {
+	const c = createContainer().registerSingleton('shared', (): unknown => other.resolve('shared'));
+	const other = createScope(c) as unknown as { resolve(token: string): unknown };
+	expect(() => createScope(c).resolve('shared')).toThrow('Circular dependency detected: shared -> shared');
+});
+
+test('同じ部品を use した別のコンテナーの singleton は、生成中でも別の生成として解決できる', () => {
+	let nested = false;
+	const other = { scope: undefined as unknown as { resolve(token: 'config'): object } };
+	const module = createContainer().registerSingleton('config', (): object => {
+		if (nested) {
+			return { base: true };
+		}
+		nested = true;
+		return { nested: other.scope.resolve('config') };
+	});
+	other.scope = createScope(createContainer().use(module));
+	expect(createScope(createContainer().use(module)).resolve('config')).toEqual({ nested: { base: true } });
+});

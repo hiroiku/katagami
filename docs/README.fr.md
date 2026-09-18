@@ -29,11 +29,11 @@ console.log(greeting);
 
 Katagami associe **types déduits des enregistrements, restrictions de portée à la compilation et aucune dépendance d'exécution** dans des fabriques TypeScript ordinaires. Aucun décorateur ni métadonnée n'est nécessaire. La libération des ressources et la résolution différée ont des points d'entrée distincts.
 
-**Vérifié le 2026-09-11**, à partir des versions stables npm et des sources officielles. Consultez les [versions et sources](./choosing-di.md#comparison-sources) et le [comparatif complet sur l'asynchronisme et la libération des ressources](../README.md#library-comparison).
+**Vérifié le 2026-09-11**, à partir des versions stables npm et des sources officielles. Les données de Katagami décrivent cette version (4.0.0). Consultez les [versions et sources](./choosing-di.md#comparison-sources) et le [comparatif complet sur l'asynchronisme et la libération des ressources](../README.md#library-comparison).
 
 | Bibliothèque / version | Types et vérification des enregistrements | Politique de portée |
 | --- | --- | --- |
-| **Katagami 3.0.3** | **Accumule les tokens littéraux/unique symbol ; rejette les tokens requis non enregistrés** | **Exclut les tokens Scoped du résolveur des fabriques Singleton/Transient** |
+| **Katagami 4.0.0** | **Accumule les tokens littéraux/unique symbol ; rejette les tokens requis non enregistrés** | **Exclut les tokens Scoped du résolveur des fabriques Singleton/Transient** |
 | InversifyJS 8.2.3 | Bindings typés ; existence vérifiée à l'exécution | Durée de vie configurée par binding |
 | tsyringe 4.10.0 | Types de classe/génériques ; enregistrements vérifiés à l'exécution | Durées de vie et conteneurs enfants |
 | TypeDI 0.10.0 | Classes et `Token<T>` ; enregistrements vérifiés à l'exécution | Services partagés/Transient, conteneurs nommés |
@@ -74,6 +74,7 @@ Prend en charge Singleton, Transient et Scoped, la composition avec use(), les f
 - [Guide pour agents IA (anglais)](./ai-coding-agents.md)
 - [Garanties de types (anglais)](./type-safety.md)
 - [Guide et API (anglais)](./guide.md)
+- [Politiques d'enregistrement et opérations (anglais)](./registration-policies.md)
 - [Exemple de portée par requête (anglais)](../examples/request-scope/README.md)
 - [Choisir une approche DI (anglais)](./choosing-di.md)
 

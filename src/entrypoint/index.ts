@@ -5,7 +5,15 @@ export type EntrypointFactory<R, F extends Callable> = ((resolver: R) => F | Pro
 	readonly [ENTRYPOINT]: true;
 };
 
-/** 実体の公開ではなく、関数の実行を公開する factory として登録する。 */
+/**
+ * Mark a factory that returns a function as a public operation.
+ *
+ * An operations scope (`createScope(container, { access: 'operations' })`) exposes only entry points.
+ * Calling the operation it returns resolves the registration and runs the function on each call.
+ *
+ * @param factory Factory function that receives a resolver and returns the operation's function
+ * @returns The same factory, marked as an entry point
+ */
 export function entrypoint<R, F extends Callable>(
 	factory: (resolver: R) => F,
 ): ((resolver: R) => F) & { readonly [ENTRYPOINT]: true };

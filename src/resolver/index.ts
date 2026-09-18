@@ -1,4 +1,4 @@
-import type { MetadataReader } from '../metadata/index.js';
+import type { MetadataPair, MetadataReader } from '../metadata/index.js';
 export type AbstractConstructor<T = unknown> = abstract new (...args: never[]) => T;
 
 /**
@@ -76,6 +76,8 @@ export type Lifetime = 'singleton' | 'transient' | 'scoped';
  */
 export interface Registration {
 	readonly metadata: MetadataReader;
+	/** The same metadata as key/value pairs, so origins can be compared by content. */
+	readonly metadataPairs: readonly MetadataPair[];
 	readonly entrypoint: boolean;
 	/**
 	 * Factory function.

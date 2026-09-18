@@ -5,8 +5,7 @@
 		"paths": {
 			"katagami": ["./src/index.ts"],
 			"katagami/disposable": ["./src/disposable/index.ts"],
-			"katagami/lazy": ["./src/lazy/index.ts"],
-			"katagami/invocation": ["./src/invocation/index.ts"]
+			"katagami/lazy": ["./src/lazy/index.ts"]
 		}
 	},
 	"include": ["examples/**/*.ts"],

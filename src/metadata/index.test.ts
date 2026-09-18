@@ -7,7 +7,7 @@ describe('登録の metadata', () => {
 		const area = createMetadataKey<string>()('area');
 		const optional = createMetadataKey<number>()('optional');
 		let calls = 0;
-		const c = createContainer({ requiredMetadata: [area] })
+		const c = createContainer({ policy: { requiredMetadata: [area] } })
 			.registerScoped(
 				'service',
 				() => {
@@ -42,7 +42,7 @@ describe('登録の metadata', () => {
 	test('欠落、同名別 identity、偽の entry、重複を生成前に拒否する', () => {
 		const key = createMetadataKey<string>()('area');
 		const twin = createMetadataKey<string>()('area');
-		const c = createContainer({ requiredMetadata: [key] });
+		const c = createContainer({ policy: { requiredMetadata: [key] } });
 		expect(() => c.registerScoped('missing', () => 1, { metadata: [] } as never)).toThrow('Required metadata');
 		expect(() => c.registerScoped('twin', () => 1, { metadata: [twin('a')] })).toThrow('Required metadata');
 		expect(() => c.registerScoped('invalid', () => 1, { metadata: [{}] } as never)).toThrow('Invalid metadata');
@@ -52,14 +52,18 @@ describe('登録の metadata', () => {
 		expect(() => c.registerScoped('same-name', () => 1, { metadata: [key('a'), twin('b')] })).toThrow(
 			'Duplicate metadata',
 		);
-		expect(() => createContainer({ requiredMetadata: [key, key] })).toThrow('Duplicate required');
-		expect(() => createContainer({ requiredMetadata: [{}] } as never)).toThrow('Invalid metadata key');
+		expect(() => createContainer({ policy: { requiredMetadata: [key, key] } })).toThrow('Duplicate required');
+		expect(() => createContainer({ policy: { requiredMetadata: [{}] } } as never)).toThrow('Invalid metadata key');
 	});
 	test('use は全登録を確認してから反映する', () => {
 		const key = createMetadataKey<string>()('area');
-		const destination = createContainer({ requiredMetadata: [key] }).registerSingleton('original', () => 1, {
-			metadata: [key('a')],
-		});
+		const destination = createContainer({ policy: { requiredMetadata: [key] } }).registerSingleton(
+			'original',
+			() => 1,
+			{
+				metadata: [key('a')],
+			},
+		);
 		const invalid = createContainer()
 			.registerSingleton('original', () => 2, { metadata: [key('a')] })
 			.registerSingleton('missing', () => 3);
@@ -74,7 +78,9 @@ describe('登録の metadata', () => {
 	});
 	test('symbol 名と値型を持つキーも同じ規約で使える', () => {
 		const key = createMetadataKey<number>()(Symbol('count'));
-		const c = createContainer({ requiredMetadata: [key] }).registerTransient('n', () => 1, { metadata: [key(3)] });
+		const c = createContainer({ policy: { requiredMetadata: [key] } }).registerTransient('n', () => 1, {
+			metadata: [key(3)],
+		});
 		expect(c.getMetadata('n').require(key)).toBe(3);
 	});
 	test('終了したコンテナーを登録で再利用しない', async () => {

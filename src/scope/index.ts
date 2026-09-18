@@ -1,12 +1,20 @@
 import type { Container } from '../container/index.js';
+import { checkReturn, observe, type PolicyState } from '../container/policy.js';
 import type { DisposableContainer, DisposableScope } from '../disposable/index.js';
 import { ContainerError } from '../error/index.js';
-// biome-ignore lint/correctness/noUnusedImports: declare の computed property に必要な型専用キー。
-import type { REGISTRATION_STATE } from '../internal.js';
-import { type ContainerInternals, INTERNALS } from '../internal.js';
+import type { REGISTRATION_STATE, RunningFactory } from '../internal.js';
+import {
+	type ContainerInternals,
+	constructing,
+	creations,
+	INTERNALS,
+	type ScopeInternals,
+	settle,
+} from '../internal.js';
 import type { AnyMetadataKey, MetadataReader } from '../metadata/index.js';
 import type { AbstractConstructor, Lifetime, Registration, Resolver } from '../resolver/index.js';
 import { buildCircularPath, tokenToString } from '../resolver/index.js';
+import { type OperationsScope, type OperationsScopeOptions, operations } from './operations.js';
 
 export interface RegistrationDescription {
 	readonly token: unknown;
@@ -20,6 +28,7 @@ export interface ResolutionEvent extends RegistrationDescription {
 }
 export type BeforeResolve = (event: ResolutionEvent) => void;
 export interface ScopeOptions {
+	readonly access?: never;
 	readonly beforeResolve?: BeforeResolve;
 }
 interface ConstructionFrame {
@@ -31,7 +40,11 @@ interface ResolutionContext {
 	readonly path: readonly unknown[];
 	readonly singleton: boolean;
 	readonly requester?: RegistrationDescription;
+	/** この面から外へ出る解決。factory が要求した解決では立てない。 */
+	readonly exposed?: boolean;
 }
+/** 公開した解決メソッドの入口。ここから始まる解決だけが結果を外へ渡す。 */
+const EXPOSED: ResolutionContext = Object.freeze({ exposed: true, path: Object.freeze([]), singleton: false });
 
 /**
  * Create a new scope (child container) from a Container, Scope, or their disposable variants.
@@ -43,6 +56,12 @@ interface ResolutionContext {
  * @returns A new Scope instance
  * @throws ContainerError if the source has been disposed
  */
+export function createScope<
+	C extends {
+		readonly [INTERNALS]: ContainerInternals;
+		readonly [REGISTRATION_STATE]: unknown;
+	},
+>(source: C, options: OperationsScopeOptions): OperationsScope<C[typeof REGISTRATION_STATE]>;
 export function createScope<
 	T,
 	Sync extends AbstractConstructor,
@@ -93,7 +112,15 @@ export function createScope<
 	source: DisposableScope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Registrations>,
 	options?: ScopeOptions,
 ): Scope<T, Sync, Async, ScopedT, ScopedSync, ScopedAsync, Registrations>;
-export function createScope(source: { readonly [INTERNALS]: ContainerInternals }, options?: ScopeOptions): Scope {
+export function createScope(
+	source: { readonly [INTERNALS]: ContainerInternals },
+	options?: ScopeOptions | OperationsScopeOptions,
+): Scope | OperationsScope<unknown> {
+	const access = options?.access;
+	// 書き間違えた面の指定を、検査の少ない通常の scope として通さない。
+	if (access !== undefined && access !== 'operations') {
+		throw new ContainerError("Unknown scope access. Omit access or use 'operations'.");
+	}
 	const internals = source[INTERNALS];
 
 	if (internals.isDisposed()) {
@@ -104,7 +131,11 @@ export function createScope(source: { readonly [INTERNALS]: ContainerInternals }
 	if (options?.beforeResolve) {
 		hooks.push(options.beforeResolve);
 	}
-	return new Scope(internals.registrations, internals.singletonCache, hooks);
+	const scope = new Scope(internals.registrations, internals.singletonCache, hooks, internals.policy);
+	if (access === 'operations') {
+		return operations(scope);
+	}
+	return scope;
 }
 
 /**
@@ -134,6 +165,7 @@ export class Scope<
 	private readonly singletonCache: Map<Registration, unknown>;
 	private readonly scopedCache: Map<Registration, unknown>;
 	private readonly beforeResolve: readonly BeforeResolve[];
+	private readonly policy: PolicyState | undefined;
 	private disposed = false;
 
 	/**
@@ -142,17 +174,19 @@ export class Scope<
 	 * @internal
 	 */
 	public declare readonly [REGISTRATION_STATE]: Registrations;
-	public readonly [INTERNALS]: ContainerInternals & { readonly kind: 'scope' };
+	public readonly [INTERNALS]: ScopeInternals;
 
 	public constructor(
 		registrations: Map<unknown, Registration[]>,
 		singletonCache: Map<Registration, unknown>,
 		beforeResolve: readonly BeforeResolve[] = [],
+		policy?: PolicyState,
 	) {
 		this.registrations = registrations;
 		this.singletonCache = singletonCache;
 		this.scopedCache = new Map();
 		this.beforeResolve = beforeResolve;
+		this.policy = policy;
 		this[INTERNALS] = {
 			beforeResolve: this.beforeResolve,
 			isDisposed: () => this.disposed,
@@ -161,7 +195,9 @@ export class Scope<
 				this.disposed = true;
 			},
 			ownCache: this.scopedCache,
+			policy: this.policy,
 			registrations: this.registrations,
+			resolveInternal: (token: unknown) => this.resolveToken(token, true),
 			singletonCache: this.singletonCache,
 		};
 	}
@@ -181,7 +217,7 @@ export class Scope<
 	public resolve<V>(token: AbstractConstructor<V> & (Sync | ScopedSync)): V;
 	public resolve<K extends keyof (T & ScopedT)>(token: K): (T & ScopedT)[K];
 	public resolve(token: unknown): unknown {
-		return this.resolveToken(token, true);
+		return this.resolveToken(token, true, this.entry());
 	}
 
 	/**
@@ -199,7 +235,7 @@ export class Scope<
 	public tryResolve<V>(token: AbstractConstructor<V>): V | Promise<V> | undefined;
 	public tryResolve(token: PropertyKey): unknown;
 	public tryResolve(token: unknown): unknown {
-		return this.resolveToken(token, false);
+		return this.resolveToken(token, false, this.entry());
 	}
 
 	/**
@@ -216,7 +252,7 @@ export class Scope<
 	public resolveAll<V>(token: AbstractConstructor<V> & (Sync | ScopedSync)): V[];
 	public resolveAll<K extends keyof (T & ScopedT)>(token: K): (T & ScopedT)[K][];
 	public resolveAll(token: unknown): unknown[] {
-		return this.resolveAllTokens(token, true) as unknown[];
+		return this.resolveAllTokens(token, true, this.entry()) as unknown[];
 	}
 
 	/**
@@ -234,9 +270,20 @@ export class Scope<
 	public tryResolveAll<V>(token: AbstractConstructor<V>): (V | Promise<V>)[] | undefined;
 	public tryResolveAll(token: PropertyKey): unknown;
 	public tryResolveAll(token: unknown): unknown {
-		return this.resolveAllTokens(token, false);
+		return this.resolveAllTokens(token, false, this.entry());
 	}
 
+	/** The context of a call through a public method: the running factory's, or the outside of this scope. */
+	private entry(): ResolutionContext {
+		const running = constructing.at(-1);
+		// A factory that calls the scope building it, instead of its resolver, still resolves inside its own
+		// construction, so lifetime and cycle checks apply to it as well. A call that arrives through another
+		// scope comes from outside.
+		if (running?.scope === this) {
+			return running.context as ResolutionContext;
+		}
+		return EXPOSED;
+	}
 	private describe(token: unknown, registration: Registration): RegistrationDescription {
 		return Object.freeze({
 			entrypoint: registration.entrypoint,
@@ -246,6 +293,9 @@ export class Scope<
 		});
 	}
 	private check(token: unknown, registration: Registration, context: ResolutionContext): void {
+		if (this.beforeResolve.length === 0) {
+			return;
+		}
 		const event = Object.freeze({
 			...this.describe(token, registration),
 			path: Object.freeze([...context.path, token]),
@@ -272,6 +322,31 @@ export class Scope<
 		}
 		return registrations;
 	}
+	/** Create a value that may leave this scope; a synchronous value passes the policy's return check here. */
+	private create(token: unknown, registration: Registration, context: ResolutionContext): unknown {
+		const instance = this.instantiate(token, registration, context);
+		if (context.exposed && !(instance instanceof Promise)) {
+			checkReturn(this.policy, instance);
+		}
+		return instance;
+	}
+	/**
+	 * Shape a created value for the caller.
+	 *
+	 * The return check runs on every resolution, so under a policy with a return check, an asynchronous
+	 * creation leaving the scope is handed out as a per-call Promise that checks the resolved value. No
+	 * listener is attached to a Promise already handed out. The per-call Promise is built only after every
+	 * synchronous failure is ruled out, so no Promise is left without a receiver.
+	 */
+	private handOut(value: unknown, context: ResolutionContext): unknown {
+		if (!context.exposed || !this.policy?.beforeReturn || !(value instanceof Promise)) {
+			return value;
+		}
+		return value.then(resolved => {
+			checkReturn(this.policy, resolved);
+			return resolved;
+		});
+	}
 	private resolveToken(
 		token: unknown,
 		required: boolean,
@@ -283,7 +358,7 @@ export class Scope<
 		}
 		const registration = registrations[registrations.length - 1] as Registration;
 		this.check(token, registration, context);
-		return this.instantiate(token, registration, context);
+		return this.handOut(this.create(token, registration, context), context);
 	}
 	private resolveAllTokens(
 		token: unknown,
@@ -297,7 +372,9 @@ export class Scope<
 		for (const registration of registrations) {
 			this.check(token, registration, context);
 		}
-		return registrations.map(registration => this.instantiate(token, registration, context));
+		// すべての要素を生成して同期の検査を終えてから、呼び出し元へ渡す Promise を作る。
+		const created = registrations.map(registration => this.create(token, registration, context));
+		return created.map(value => this.handOut(value, context));
 	}
 	private instantiate(token: unknown, registration: Registration, context: ResolutionContext): unknown {
 		if (registration.lifetime === 'scoped' && context.singleton) {
@@ -305,17 +382,41 @@ export class Scope<
 				`Captive dependency detected: scoped token "${tokenToString(token)}" cannot be resolved inside a singleton factory. Scoped instances must not be captured by singletons.`,
 			);
 		}
+		const construction = context.construction ?? [];
+		// Only the unbroken run of unfinished constructions ending at the requester is waiting on this
+		// resolution. A finished dependency's stored resolver serves later callers, not its ancestors.
+		let waiting = construction.length;
+		while (waiting > 0 && construction[waiting - 1]?.active) {
+			waiting--;
+		}
+		// A pending creation in that run is the one being built: waiting for it would never settle, so the
+		// cycle is reported before the cache is consulted.
+		if (construction.slice(waiting).some(frame => frame.token === token)) {
+			const chain = new Set(construction.slice(waiting).map(frame => frame.token));
+			throw new ContainerError(`Circular dependency detected: ${buildCircularPath(chain, token)}`);
+		}
 		let cache = this.scopedCache;
 		if (registration.lifetime === 'singleton') {
 			cache = this.singletonCache;
 		}
 		if (registration.lifetime !== 'transient' && cache.get(registration) !== undefined) {
-			return cache.get(registration);
+			const cached = cache.get(registration);
+			if (!(cached instanceof Promise)) {
+				observe(this.policy, registration, token, cached);
+			}
+			return cached;
 		}
-		const construction = context.construction ?? [];
-		const activeTokens = new Set(construction.filter(frame => frame.active).map(frame => frame.token));
-		if (activeTokens.has(token)) {
-			throw new ContainerError(`Circular dependency detected: ${buildCircularPath(activeTokens, token)}`);
+		// A factory still running synchronously is always waiting, whichever resolver or scope the call came
+		// through; a singleton is shared by every scope of its container, but not by containers that copied
+		// the same registration with use().
+		const shares = (entry: RunningFactory) =>
+			entry.scope === this ||
+			(registration.lifetime === 'singleton' &&
+				entry.registration === registration &&
+				entry.singletons === this.singletonCache);
+		if (constructing.some(entry => entry.token === token && shares(entry))) {
+			const chain = new Set(constructing.filter(shares).map(entry => entry.token));
+			throw new ContainerError(`Circular dependency detected: ${buildCircularPath(chain, token)}`);
 		}
 		const frame: ConstructionFrame = { active: true, token };
 		const childContext: ResolutionContext = {
@@ -332,24 +433,39 @@ export class Scope<
 			tryResolveAll: (target: unknown) => this.resolveAllTokens(target, false, childContext),
 		});
 		let pending = false;
+		constructing.push({ context: childContext, registration, scope: this, singletons: this.singletonCache, token });
 		try {
 			const instance = registration.factory(resolver as Resolver<never, never>);
+			// 通常の thenable は依存実体として返し、解決のために購読を始めない。
 			if (instance instanceof Promise) {
-				void instance.then(
-					() => {
+				pending = true;
+				// 記帳は自分が作った chain の内側で済ませ、呼び出し元へ渡す Promise には listener を付けない。
+				// 失敗はそのまま外へ伝え、捨てられた失敗は処理系の既定どおり現れる。
+				const tracked = instance.then(
+					value => {
+						observe(this.policy, registration, token, value);
 						frame.active = false;
+						return value;
 					},
-					() => {
+					error => {
 						frame.active = false;
+						throw error;
 					},
 				);
-				pending = true;
+				if (registration.lifetime !== 'transient') {
+					// 破棄が閉じる対象を知るための記帳。破棄は呼び出し元へ渡した Promise ではなくこれを待つ。
+					creations.set(tracked, settle(instance));
+					cache.set(registration, tracked);
+				}
+				return tracked;
 			}
+			observe(this.policy, registration, token, instance);
 			if (registration.lifetime !== 'transient') {
 				cache.set(registration, instance);
 			}
 			return instance;
 		} finally {
+			constructing.pop();
 			if (!pending) {
 				frame.active = false;
 			}

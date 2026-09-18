@@ -4,7 +4,8 @@
 
 Katagami publishes ESM, CommonJS and TypeScript declarations, with no runtime dependencies.
 The CI consumer checks run on Node.js 22 and 24; runtime tests and examples also run with Bun.
-Type examples use TypeScript 5.9, `strict: true`, and the `ES2022` and `ESNext.Disposable` libraries.
+The published declarations require TypeScript 5.0 or later. Type examples use TypeScript 5.9,
+`strict: true`, and the `ES2022` and `ESNext.Disposable` libraries.
 Browser APIs in examples, such as `crypto.randomUUID`, additionally need the `DOM` library.
 
 Core DI does not require decorator compiler flags, metadata emission or polyfills.
@@ -57,7 +58,10 @@ service.list();
 
 Class return types are inferred from constructors. Classes follow TypeScript's structural typing;
 see [token identity](./type-safety.md#class-tokens-use-structural-typing).
-Async factories produce Promise-typed resolutions. Await them explicitly.
+Async factories produce Promise-typed resolutions. Await them explicitly. A resolution returns the end
+of katagami's own bookkeeping chain, not the promise the factory returned. Katagami's bookkeeping and
+disposal attach no listener to what it hands out, so a rejected resolution you drop surfaces as an
+unhandled rejection, unless a later resolution waits on the same cached promise.
 
 ## Composition and test substitution
 
@@ -126,8 +130,10 @@ and retains its registered token types.
 
 Scope disposal cleans its cached scoped instances; container disposal cleans its singleton cache.
 Instances are processed in reverse cache insertion order, asynchronous results are awaited, and
-cleanup errors are combined in an `AggregateError`. Disposal is idempotent. Transient instances
-are not cached or automatically owned: arrange their cleanup explicitly.
+cleanup errors are combined in an `AggregateError`. A cached asynchronous creation that rejected
+yields no resolved value to close: disposal awaits it, skips it, continues with the remaining
+instances, and leaves that failure to the caller that resolved the token. Disposal is idempotent.
+Transient instances are not cached or automatically owned: arrange their cleanup explicitly.
 
 ## Lazy resolution
 
@@ -176,6 +182,17 @@ Default accumulated registration provides the registration-order checks describe
 | `registerScoped(token, factory)` | Register a factory cached per scope |
 | `use(source)` | Copy another container's registrations, replacing matching token entries |
 | `createScope(source)` | Create a scope from a container, scope or disposable view |
+| `createContainer({ policy })` | Share a policy's settings and observed origins among containers given the same policy object |
+| `ContainerPolicy` (type export) | Check a policy with `satisfies` while keeping its hook and required-key types |
+| `policy.requiredMetadata` | Require metadata keys on every registration and in `.use()` |
+| `createMetadataKey<T>()(name)` | Define a typed metadata key |
+| `{ metadata: [KEY(value)] }` (third registration argument) | Declare registration metadata next to the factory |
+| `container.getMetadata(token)` | Read the last registration's metadata without creating the service |
+| `entrypoint(factory)` | Mark a factory that returns a function as a public operation |
+| `beforeResolve(event)` (scope option) | Check a registration synchronously just before it is resolved, including cache hits |
+| `policy.beforeReturn({ registrations })` | Synchronously check the observed origins of values returned by top-level resolution and of operations' direct results; resolutions requested by factories are not checked |
+| `createScope(source, { access: 'operations' })` | Create a new scope whose `get(token)` returns public operations and whose disposal waits for running calls |
+| `operations.get(token)(...args)` | Create nothing on `get`; resolve, run and check the operation on each call. The result is always a Promise |
 | `scope.resolve(token)` | Resolve the last registration; fail if missing |
 | `scope.resolveAll(token)` | Resolve every registration for a token |
 | `scope.tryResolve(token)` | Resolve the last registration or return `undefined` |
@@ -185,6 +202,16 @@ Default accumulated registration provides the registration-order checks describe
 | `ContainerError` | Runtime error for missing registrations, cycles and invalid scope operations |
 | `Resolver` (type export) | Factory resolver type; retain inferred generics when extracting factories |
 
-## 登録の属性と公開操作
+## Registration policies and operations
 
-必須 metadata、`beforeResolve`、`entrypoint`、`katagami/invocation` は[専用ガイド](./registration-policies.ja.md)を参照してください。既存の lifetime と `.use()` をそのまま利用できます。
+See [registration policies and operations](./registration-policies.md) for the shared `policy`, required
+metadata, `beforeResolve`, `beforeReturn`, `entrypoint` and operations scopes. Get a public operation
+with `createScope(container, { access: 'operations' }).get(name)`; the function it returns resolves its
+dependencies when called and always returns a Promise. Pass the same `policy` object to every module
+that follows the policy, and assemble them with ordinary lifetimes and `.use()`. A value the policy
+forbids does not leave through top-level resolution or an operation result, as long as it is an object
+or function whose origin can be tracked.
+
+`beforeResolve` checks resolutions in the scope that owns the resolver. It does not rebind a shared
+singleton's resolver to its caller, and it does not re-check values that were already obtained. Use
+scoped registrations for work that depends on the request or its permissions.

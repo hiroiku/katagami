@@ -51,7 +51,6 @@ try {
 			katagami: [join(root, 'src/index.ts')],
 			'katagami/disposable': [join(root, 'src/disposable/index.ts')],
 			'katagami/lazy': [join(root, 'src/lazy/index.ts')],
-			'katagami/invocation': [join(root, 'src/invocation/index.ts')],
 		},
 	});
 	for (const diagnostic of ts.getPreEmitDiagnostics(program)) {

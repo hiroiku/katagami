@@ -8,6 +8,7 @@
 - [AI coding agents](https://github.com/hiroiku/katagami/blob/master/docs/ai-coding-agents.md): workflow, diagnostics and project instructions.
 - [Type safety](https://github.com/hiroiku/katagami/blob/master/docs/type-safety.md): accumulated tokens, structural classes, declared maps and limits.
 - [API guide](https://github.com/hiroiku/katagami/blob/master/docs/guide.md): lifetimes, factories, modules, disposal and lazy resolution.
+- [Registration policies](https://github.com/hiroiku/katagami/blob/master/docs/registration-policies.md): a shared policy object, required metadata, beforeReturn and operations scopes, with their contracts and limits.
 - [Request-scope starter](https://github.com/hiroiku/katagami/tree/master/examples/request-scope): a runnable example with fake injection and cleanup.
 - [Choosing DI](https://github.com/hiroiku/katagami/blob/master/docs/choosing-di.md): use cases and trade-offs.
 
